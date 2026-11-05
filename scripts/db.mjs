@@ -188,7 +188,7 @@ switch (command) {
     if (args.includes("--yes")) cliArgs.push("--yes");
     const result = supabase(cliArgs);
     if (result.status === 0) {
-      console.log("\nApplied. Next: npm run db:types, then commit the updated types.");
+      console.log("\nFinished. If migrations were applied, run npm run db:types and commit the result.");
     }
     exitWith(result);
     break;
