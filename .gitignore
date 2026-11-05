@@ -1,0 +1,34 @@
+# dependencies
+/node_modules
+
+# testing
+/coverage
+/test-results
+/playwright-report
+/blob-report
+/playwright/.cache
+/e2e/.auth
+
+# next.js
+/.next/
+/out/
+/build
+next-env.d.ts
+*.tsbuildinfo
+
+# env files: only the documented example is ever committed
+.env*
+!.env.example
+
+# deployment and local tools
+.vercel
+.DS_Store
+*.pem
+*.log
+
+# supabase cli state (link info and temp files)
+/supabase/.temp
+/supabase/.branches
+
+# local Claude Code overrides
+.claude/settings.local.json
