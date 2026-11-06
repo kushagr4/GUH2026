@@ -121,6 +121,8 @@ npm run db:audit
 
 It lists any public table without RLS or policies, any privilege held by `anon`, any `SECURITY DEFINER` function in `public`, and any public or unlimited bucket. It then shows Supabase's security advisors. Any row in the first part is a problem to fix.
 
+One advisor warning is expected and can't be fixed on the Free plan: **Leaked Password Protection Disabled**. Checking passwords against HaveIBeenPwned is a Pro-plan feature. The minimum password length of 8 still applies. Treat any other advisor warning as something to fix.
+
 ## Removing the smoke-test objects
 
 Keep these until the end of the event, because they power `/dev` and the tests. To remove them afterwards:

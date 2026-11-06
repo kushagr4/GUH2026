@@ -72,7 +72,7 @@ e2e/                Playwright. smoke needs no backend, hosted needs SUPABASE_TE
 ## Free-plan discipline
 
 - Select only the columns you need, always paginate, and never poll. `getCurrentUser` is cached per request.
-- Realtime: subscribe only on pages that show live data, one channel per component, with a filter where possible. `useTableChanges` handles cleanup.
+- Realtime: subscribe only on pages that show live data, one channel per component, with a filter where possible. Use `useTableChanges`, which sends the user's token before joining and handles cleanup. If you open a channel yourself, `await supabase.realtime.setAuth()` first. Otherwise the join can go out with only the publishable key, RLS treats the subscriber as anonymous, and no changes arrive.
 - Uploads: 5 MB per file by default. Go browser to Storage directly so files don't pass through the server.
 - Auth emails: the built-in mailer only reaches organisation members, at about 2 emails an hour. "Confirm email" stays off, and don't build a flow that depends on email.
 - See `docs/free-plan-usage.md`.

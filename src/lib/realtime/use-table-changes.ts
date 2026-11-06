@@ -1,6 +1,9 @@
 "use client";
 
-import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
+import type {
+  RealtimeChannel,
+  RealtimePostgresChangesPayload,
+} from "@supabase/supabase-js";
 import { useEffect, useId, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
@@ -40,22 +43,42 @@ export function useTableChanges<Row extends Record<string, unknown>>({
     if (!enabled) return;
 
     const supabase = createClient();
-    const channel = supabase
-      .channel(`${schema}:${table}:${instanceId}`)
-      .on<Row>(
-        "postgres_changes",
-        { event: "*", schema, table, ...(filter ? { filter } : {}) },
-        (payload) => callback.current(payload),
-      )
-      .subscribe((state) => {
-        if (state === "SUBSCRIBED") setStatus("live");
-        else if (state === "CHANNEL_ERROR" || state === "TIMED_OUT") {
-          setStatus("error");
-        }
+    let channel: RealtimeChannel | undefined;
+    let active = true;
+
+    // Realtime applies RLS using the token sent when the channel joins. The
+    // browser client loads the session from cookies asynchronously, so without
+    // this the join can go out with only the publishable key. The server then
+    // treats the subscriber as anon and RLS hides every change.
+    supabase.realtime
+      .setAuth()
+      .then(() => {
+        if (!active) return;
+        channel = supabase
+          .channel(`${schema}:${table}:${instanceId}`, {
+            // Report "live" only once the server confirms the subscription,
+            // and an error (not "live") if it refuses it.
+            config: { postgres_changes_options: { wait: true } },
+          })
+          .on<Row>(
+            "postgres_changes",
+            { event: "*", schema, table, ...(filter ? { filter } : {}) },
+            (payload) => callback.current(payload),
+          )
+          .subscribe((state) => {
+            if (state === "SUBSCRIBED") setStatus("live");
+            else if (state === "CHANNEL_ERROR" || state === "TIMED_OUT") {
+              setStatus("error");
+            }
+          });
+      })
+      .catch(() => {
+        if (active) setStatus("error");
       });
 
     return () => {
-      void supabase.removeChannel(channel);
+      active = false;
+      if (channel) void supabase.removeChannel(channel);
       setStatus("idle");
     };
   }, [enabled, filter, instanceId, schema, table]);

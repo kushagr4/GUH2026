@@ -32,6 +32,9 @@ test.describe("hosted journey", () => {
     await page.getByLabel("Email").fill(user.email);
     await page.getByLabel("Password").fill(user.password);
     await page.getByRole("button", { name: "Sign in" }).click();
+    // Wait for the redirect. Navigating away sooner cancels the sign-in request
+    // before its session cookies are set.
+    await page.waitForURL(/\/app\//);
   }
 
   test("rejects a wrong password with a friendly message", async ({ page }) => {
@@ -160,12 +163,11 @@ test.describe("hosted journey", () => {
   test("shows a new row live over Realtime, with no reload", async ({ page }) => {
     await signIn(page);
     await page.goto("/dev/realtime");
+    // "Live" only appears once the server has confirmed the subscription, so
+    // there is no need to wait any longer before inserting.
     await expect(page.getByTestId("realtime-status")).toHaveText("Live", {
       timeout: 20_000,
     });
-
-    // Subscriptions take a moment to register on the server.
-    await page.waitForTimeout(1500);
     await page.getByRole("button", { name: "Insert a test record" }).click();
     await expect(page.getByTestId("realtime-events")).toContainText("INSERT", {
       timeout: 20_000,

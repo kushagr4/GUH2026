@@ -5,6 +5,7 @@ import type {
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { readTestEnv } from "../support/test-env";
 import {
+  createAnon,
   createTestUser,
   cleanupTestUser,
   type TestClient,
@@ -24,7 +25,9 @@ function subscribe(
 ): Promise<RealtimeChannel> {
   return new Promise((resolve, reject) => {
     const channel = client
-      .channel(name)
+      // Same as useTableChanges: SUBSCRIBED only once the server confirms the
+      // subscription, CHANNEL_ERROR if it refuses it.
+      .channel(name, { config: { postgres_changes_options: { wait: true } } })
       .on<Row>(
         "postgres_changes",
         {
@@ -72,6 +75,7 @@ describe.skipIf(!env)("Realtime on the hosted project", () => {
   it("delivers a user's own changes, and never their content to anyone else", async () => {
     const aliceEvents: Change[] = [];
     const bobEvents: Change[] = [];
+    const anonEvents: Change[] = [];
 
     channels.push([
       alice.client,
@@ -82,14 +86,18 @@ describe.skipIf(!env)("Realtime on the hosted project", () => {
         `owner_id=eq.${alice.id}`,
       ),
     ]);
-    // Bob deliberately subscribes with no filter, the worst case for a leak.
+    // Bob and an anonymous visitor deliberately subscribe with no filter, the
+    // worst case for a leak. Both subscriptions are accepted; RLS must then
+    // hide every row from them.
     channels.push([
       bob.client,
       await subscribe(bob.client, "bob-all", (event) => bobEvents.push(event)),
     ]);
-
-    // The server needs a moment to register the subscriptions.
-    await new Promise((done) => setTimeout(done, 1500));
+    const anon = createAnon(env!);
+    channels.push([
+      anon,
+      await subscribe(anon, "anon-all", (event) => anonEvents.push(event)),
+    ]);
 
     const secret = `private title ${crypto.randomUUID()}`;
     const { data, error } = await alice.client
@@ -114,12 +122,32 @@ describe.skipIf(!env)("Realtime on the hosted project", () => {
     // Allow time for any wrongly delivered events to arrive before asserting.
     await new Promise((done) => setTimeout(done, 3000));
 
+    // Another signed-in user: RLS filters the changes out silently.
     expect(bobEvents.filter((event) => event.eventType === "INSERT")).toEqual([]);
     expect(bobEvents.filter((event) => event.eventType === "UPDATE")).toEqual([]);
-    // Postgres can't check RLS on a deleted row, so a DELETE event may reach other
-    // subscribers. With the default replica identity it carries only the primary
-    // key, which this assertion pins down: no row content ever leaks.
+
+    // An anonymous subscriber has no privileges on the table, so Realtime sends
+    // it an empty "401 Unauthorized" notice instead: no row, no id, no timestamp.
+    for (const event of anonEvents.filter((e) => e.eventType !== "DELETE")) {
+      expect(event).toMatchObject({ new: {}, old: {}, commit_timestamp: null });
+      expect((event as Change & { errors?: string[] }).errors).toContain(
+        "Error 401: Unauthorized",
+      );
+    }
+
+    // Postgres can't check RLS on a deleted row, so a DELETE event may reach
+    // other subscribers. With the default replica identity it carries only the
+    // primary key. Whatever arrives, no row content ever leaks.
     expect(JSON.stringify(bobEvents)).not.toContain(secret);
+    expect(JSON.stringify(anonEvents)).not.toContain(secret);
+  });
+
+  it("refuses an anonymous visitor watching a user's rows", async () => {
+    const anon = createAnon(env!);
+    await expect(
+      subscribe(anon, "anon-filtered", () => {}, `owner_id=eq.${alice.id}`),
+    ).rejects.toThrow();
+    await anon.removeAllChannels();
   });
 
   it("closes channels cleanly", async () => {
