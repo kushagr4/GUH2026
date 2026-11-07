@@ -20,7 +20,7 @@ import type { VisionAnalyzer } from "@/lib/embergap/agents/validators/vision";
  *    `return process.env.ANTHROPIC_API_KEY ? createClaudeVisionAnalyzer() : null;`
  *
  * The run then queues "vision.assess" with that output, and
- * danilVisionProcessor's guardrails turn it into the canonical finding.
+ * visionValidatorProcessor's guardrails turn it into the canonical finding.
  */
 export function getLiveVisionAnalyzer(): VisionAnalyzer | null {
   return null;

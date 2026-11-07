@@ -1,6 +1,6 @@
 import "server-only";
 import { after } from "next/server";
-import { DANIL_PROCESSORS } from "@/lib/embergap/agents/fusion/runtime-processors";
+import { VALIDATION_PROCESSORS } from "@/lib/embergap/agents/fusion/runtime-processors";
 import {
   PERFECT_LINK,
   RuntimeAgent,
@@ -136,9 +136,9 @@ function systemEvent(
 const PROCESSORS: Record<(typeof RUN_AGENT_IDS)[number], readonly TaskProcessor<never>[]> = {
   weather: [weatherContextProcessor, eonetContextProcessor] as unknown as TaskProcessor<never>[],
   satellite: MAC_PROCESSORS.satellite,
-  vision: [...DANIL_PROCESSORS.vision, ...MAC_PROCESSORS.vision],
+  vision: [...VALIDATION_PROCESSORS.vision, ...MAC_PROCESSORS.vision],
   witness: MAC_PROCESSORS.witness,
-  fusion: DANIL_PROCESSORS.fusion,
+  fusion: VALIDATION_PROCESSORS.fusion,
 };
 
 function witnessInput(reports: readonly AgentReport[]): WitnessTaskInput {
