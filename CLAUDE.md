@@ -148,7 +148,7 @@ A reporter submits a safely geolocated, optional-photo **possible** wildfire obs
 
 ### Coordination: five contributors, named ownership and split APIs
 
-The **five independent work sessions** are Claude on Mac, Claude on PC, **Danil**, **Outrolife**, and **d3vmakes**. No additional Developer A/C exists. Use independent branches and no shared working trees. Read the **definitive API and file-ownership matrix** under `docs/architecture.md#five-contributor-work-split-definitive-ownership`.
+The **five independent work sessions** are Claude on Mac, Claude on PC, **Danil**, **Outrolife**, and **d3vmakes**. No additional Developer A/C exists. Use independent branches and no shared working trees. Read the **definitive API and file-ownership matrix** under `docs/architecture.md#five-contributor-work-split-definitive-ownership` and **exact upstream endpoints, internal routes and credential ownership** in `docs/embergap-api-ownership.md`.
 
 | Contributor | Branch | Owns |
 | --- | --- | --- |
