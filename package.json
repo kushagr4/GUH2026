@@ -15,7 +15,8 @@
     "test:watch": "vitest --project unit",
     "test:integration": "vitest run --project integration",
     "test:e2e": "playwright test",
-    "validate": "npm run lint && npm run typecheck && npm run test && npm run db:lint && npm run secrets:scan && npm run build && npm run check:bundle",
+    "validate": "npm run check:workflows && npm run lint && npm run typecheck && npm run test && npm run db:lint && npm run secrets:scan && npm run build && npm run check:bundle",
+    "preflight": "node scripts/preflight.mjs",
     "doctor": "node scripts/doctor.mjs",
     "health": "node scripts/health.mjs",
     "db:new": "node scripts/db.mjs new",
@@ -29,7 +30,9 @@
     "env:share": "node scripts/db.mjs env-share",
     "env:test": "node scripts/db.mjs env-test",
     "secrets:scan": "node scripts/scan-secrets.mjs",
-    "check:bundle": "node scripts/check-client-bundle.mjs"
+    "check:bundle": "node scripts/check-client-bundle.mjs",
+    "check:workflows": "node scripts/check-workflows.mjs",
+    "check:commits": "node scripts/check-commits.mjs --branch"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "1.5.0",
@@ -61,6 +64,7 @@
     "supabase": "3.0.0",
     "tailwindcss": "4.3.4",
     "typescript": "5.9.3",
-    "vitest": "5.1.0"
+    "vitest": "5.1.0",
+    "yaml": "2.9.1"
   }
 }
