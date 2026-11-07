@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { FormMessage } from "@/components/form-message";
 import { NotConfiguredNotice } from "@/components/not-configured-notice";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { signIn } from "@/features/auth/actions";
 import { AuthForm } from "@/features/auth/components/auth-form";
+import { AuthPanel } from "@/features/auth/components/auth-panel";
 import { safeRedirectPath } from "@/lib/routes";
 import { getCurrentUser } from "@/lib/supabase/auth";
 
@@ -20,19 +20,18 @@ export default async function LoginPage({
   if (await getCurrentUser()) redirect(target);
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-xl">Sign in</CardTitle>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        <NotConfiguredNotice />
-        {error ? (
-          <FormMessage variant="error">
-            That confirmation link is invalid or has expired. Try signing in.
-          </FormMessage>
-        ) : null}
-        <AuthForm mode="sign-in" action={signIn} next={target} />
-      </CardContent>
-    </Card>
+    <AuthPanel
+      mode="sign-in"
+      title="Welcome back"
+      description="Sign in to review investigations, evidence and agent findings."
+    >
+      <NotConfiguredNotice />
+      {error ? (
+        <FormMessage variant="error">
+          That confirmation link is invalid or has expired. Try signing in.
+        </FormMessage>
+      ) : null}
+      <AuthForm mode="sign-in" action={signIn} next={target} />
+    </AuthPanel>
   );
 }

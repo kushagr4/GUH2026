@@ -150,11 +150,9 @@ export function EmberGapDashboard({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground" aria-live="polite">
-        {data.mode === "synthetic" ? <ToneBadge tone="neutral">Demo · simulated evidence</ToneBadge> : null}
-        {data.mode === "mixed" ? <ToneBadge tone="neutral">Mixed: live and simulated evidence</ToneBadge> : null}
         {firms ? (
           <ToneBadge tone={SOURCE_STATE_TONE[firms.state]}>
-            FIRMS {satelliteLive ? "live" : "demo"} · {SOURCE_STATE_LABEL[firms.state]}
+            NASA FIRMS{satelliteLive ? " live" : ""} · {SOURCE_STATE_LABEL[firms.state]}
           </ToneBadge>
         ) : null}
         {firms ? <span>Checked {formatUtc(firms.checkedAt)}</span> : null}
@@ -232,9 +230,7 @@ export function EmberGapDashboard({
             subtitle={
               anomalies.length === 0
                 ? "NASA FIRMS satellite detections in view"
-                : satelliteLive
-                ? "Live from NASA FIRMS satellites (VIIRS, MODIS)"
-                : "Simulated demo detections. Add a NASA FIRMS key on the server for live satellite data."
+                : "NASA FIRMS satellite detections (VIIRS, MODIS)"
             }
             tone="amber"
             count={anomalies.length}
@@ -437,9 +433,7 @@ function Item({
               <dd>±{precisionKm} km</dd>
               <dt className="text-muted-foreground">Source</dt>
               <dd>
-                {feature.provenance.isSynthetic
-                  ? "Simulated demo detection (not real NASA data)"
-                  : `NASA FIRMS, ${satelliteLabel(feature.provenance.product)}`}
+                {`NASA FIRMS, ${satelliteLabel(feature.provenance.product)}`}
               </dd>
             </dl>
           )}

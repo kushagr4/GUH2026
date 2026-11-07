@@ -300,7 +300,7 @@ export function ReportForm({ userId }: { userId: string }) {
         <legend className="mb-2 text-base font-semibold">Where did you see it?</legend>
         <p id="report-location-hint" className="text-sm text-muted-foreground">
           Mark roughly where the smoke or fire is, not where you are standing. Reports are accepted for {SERVICE_AREA.name}{" "}
-          only during this demo. Investigators see this point; anyone else only sees an area of about 1 km or more.
+          only. Investigators see this point; anyone else only sees an area of about 1 km or more.
         </p>
         <div>
           <Button type="button" variant="outline" onClick={handleUseLocation} disabled={locating || submitting}>

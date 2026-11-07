@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { NotConfiguredNotice } from "@/components/not-configured-notice";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { signUp } from "@/features/auth/actions";
 import { AuthForm } from "@/features/auth/components/auth-form";
+import { AuthPanel } from "@/features/auth/components/auth-panel";
 import { ROUTES } from "@/lib/routes";
 import { getCurrentUser } from "@/lib/supabase/auth";
 
@@ -13,14 +13,13 @@ export default async function SignupPage() {
   if (await getCurrentUser()) redirect(ROUTES.dashboard);
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-xl">Create an account</CardTitle>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        <NotConfiguredNotice />
-        <AuthForm mode="sign-up" action={signUp} />
-      </CardContent>
-    </Card>
+    <AuthPanel
+      mode="sign-up"
+      title="Create your account"
+      description="Submit possible-fire observations and follow how independent agents assess them."
+    >
+      <NotConfiguredNotice />
+      <AuthForm mode="sign-up" action={signUp} />
+    </AuthPanel>
   );
 }

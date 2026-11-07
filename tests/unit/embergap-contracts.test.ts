@@ -606,7 +606,7 @@ describe("read models", () => {
       observedAt: null,
       freshness: "not_observed",
       sources: ["human"],
-      provenance: { ...provenance, provider: "EmberGap synthetic fixtures", product: null },
+      provenance: { ...provenance, provider: "EmberGap", product: null },
     };
     const response = {
       mode: "synthetic",
