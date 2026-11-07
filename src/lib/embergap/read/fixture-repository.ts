@@ -887,7 +887,7 @@ function buildDetail(scenario: Scenario): InvestigationDetailResponse {
         spec.weather.state === "unavailable" && source === "weather"
           ? spec.weather.message
           : notObserved
-            ? "Nothing found in the window checked. That is unknown, not evidence of no fire."
+            ? "None in window. Unknown, not evidence of no fire."
             : null,
     };
   };

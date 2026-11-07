@@ -77,7 +77,7 @@ describe("the partition demonstration", () => {
     expect(recovered.blockedTasks).toEqual([]);
     expect(recovered.tasksCompleted.weather).toBe(2);
     expect(Object.values(recovered.reachability).flatMap((peers) => Object.values(peers))).toEqual(Array(12).fill("reachable"));
-    expect(result.reconciliation).toMatchObject({ isolated: ["fusion", "satellite"], completedWhileIsolated: 5 });
+    expect(result.reconciliation).toMatchObject({ isolated: ["fusion", "satellite"], completedWhileIsolated: 7 });
     expect(result.reconciliation!.redelivered).toBeGreaterThan(0);
   });
 
@@ -87,21 +87,30 @@ describe("the partition demonstration", () => {
     for (const observation of observations) expect(observationSchema.parse(observation).provenance.isSynthetic).toBe(true);
     for (const finding of findings) expect(agentFindingSchema.parse(finding).isSynthetic).toBe(true);
     for (const event of events) agentEventSchema.parse(event);
-    expect(findings).toHaveLength(12);
+    // 12 source findings, plus the fusion agent's recommendation each time its evidence set changed.
+    expect(findings.filter((finding) => finding.agentId !== "fusion")).toHaveLength(12);
+    expect(findings.filter((finding) => finding.agentId === "fusion").length).toBeGreaterThan(0);
     const types = events.map((event) => event.type);
-    expect(types.filter((type) => type === "finding_recorded")).toHaveLength(12);
+    expect(types.filter((type) => type === "finding_recorded")).toHaveLength(findings.length);
     expect(types.filter((type) => type === "partition_started")).toHaveLength(1);
     expect(types.filter((type) => type === "partition_healed")).toHaveLength(2);
     const reconciled = events.filter((event) => event.type === "reconciled");
     expect(reconciled.map((event) => event.investigationId).sort()).toEqual([A, B].sort());
-    expect(reconciledEventDetailsSchema.parse(reconciled[0].details)).toMatchObject({ isolated: ["fusion", "satellite"], completedWhileIsolated: 5 });
+    expect(reconciledEventDetailsSchema.parse(reconciled[0].details)).toMatchObject({ isolated: ["fusion", "satellite"], completedWhileIsolated: 7 });
     // Nothing private or internal in what investigators would see.
     expect(JSON.stringify(result)).not.toMatch(/secret|stack|Error:/);
   });
 
   it("concludes what each task should, whatever the timing", async () => {
     const result = await runPartitionDemo();
-    expect(outcomes(result)).toEqual({
+    const all = outcomes(result);
+    // Source tasks are keyed "<agent>/<task>@X"; fusion's evidence-derived task ids are not.
+    const isSourceTask = (task: string) => /^(weather|satellite|vision)\//.test(task);
+    const fusion = Object.entries(all).filter(([task]) => !isSourceTask(task));
+    // Fusion advice lives only in its recommendation: always "context", never extra support.
+    expect(fusion.length).toBeGreaterThan(0);
+    for (const [, [assessment]] of fusion) expect(assessment).toBe("context");
+    expect(Object.fromEntries(Object.entries(all).filter(([task]) => isSourceTask(task)))).toEqual({
       "weather/context@A": ["context", "dry_or_windy_conditions"],
       "weather/eonet@A": ["context", "eonet_wildfire_event_nearby"],
       "satellite/pass-1@A": ["supports", "thermal_anomaly_nearby"],

@@ -109,25 +109,21 @@ export function InvestigationView({ detail }: { detail: InvestigationDetailRespo
               {priorityLabel(recommendation?.reviewPriority ?? investigation.reviewPriority)}
             </ToneBadge>
           </CardTitle>
-          <CardDescription>
-            From the fusion agent, for a human to review. It is not a fire confirmation, and the priority is a
-            rule-based label, not a probability.
-          </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           {fusion && recommendation ? (
             <>
               <p className="text-pretty">{fusion.explanation}</p>
               <p className="text-sm text-muted-foreground">
-                Suggested status: {STATUS_LABEL[recommendation.recommendedStatus]}. Independent source types supporting
-                the report: {recommendation.independentSourceCount} (a count, not a probability).
+                Suggested: {STATUS_LABEL[recommendation.recommendedStatus]} · Independent sources:{" "}
+                {recommendation.independentSourceCount}
                 {recommendation.possibleDuplicateReportIds.length
-                  ? ` Possible duplicate reports, counted once: ${recommendation.possibleDuplicateReportIds.length}.`
+                  ? ` · Duplicates counted once: ${recommendation.possibleDuplicateReportIds.length}`
                   : ""}
               </p>
               {contradictions.length ? (
                 <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
-                  <p className="font-medium">Contradicting evidence (kept, not resolved automatically)</p>
+                  <p className="font-medium">Contradicting evidence</p>
                   <ul className="mt-1 list-disc pl-5">
                     {contradictions.map((finding) => (
                       <li key={finding.id}>
@@ -139,7 +135,7 @@ export function InvestigationView({ detail }: { detail: InvestigationDetailRespo
               ) : null}
               {recommendation.evidenceGaps.length ? (
                 <div className="text-sm">
-                  <p className="font-medium">Unknowns and gaps</p>
+                  <p className="font-medium">Gaps</p>
                   <ul className="mt-1 list-disc pl-5 text-muted-foreground">
                     {recommendation.evidenceGaps.map((gap) => (
                       <li key={gap}>{gap}</li>
@@ -149,7 +145,7 @@ export function InvestigationView({ detail }: { detail: InvestigationDetailRespo
               ) : null}
             </>
           ) : (
-            <p className="text-sm text-muted-foreground">No recommendation yet. The agents are still working.</p>
+            <p className="text-sm text-muted-foreground">No recommendation yet.</p>
           )}
         </CardContent>
       </Card>
@@ -173,10 +169,9 @@ export function InvestigationView({ detail }: { detail: InvestigationDetailRespo
                   {summary ? <p>{summary}</p> : null}
                   {item.message ? <p className="text-muted-foreground">{item.message}</p> : null}
                   <p className="text-xs text-muted-foreground">
-                    {item.latestObservedAt ? `Newest observation ${formatUtc(item.latestObservedAt)} · ` : ""}
-                    checked {formatUtc(item.checkedAt)}
+                    {item.latestObservedAt ? `Latest ${formatUtc(item.latestObservedAt)}` : `Checked ${formatUtc(item.checkedAt)}`}
                     {item.windowStart && item.windowEnd
-                      ? ` · window checked ${formatUtc(item.windowStart)} to ${formatUtc(item.windowEnd)}`
+                      ? ` · window ${formatUtc(item.windowStart)} – ${formatUtc(item.windowEnd)}`
                       : ""}
                   </p>
                 </CardContent>
@@ -191,9 +186,6 @@ export function InvestigationView({ detail }: { detail: InvestigationDetailRespo
           <h2 id="findings-heading" className="text-lg font-semibold">
             Agent findings
           </h2>
-          <p className="text-sm text-muted-foreground">
-            Each agent works independently on its own evidence and records its own finding.
-          </p>
           <ol className="flex flex-col gap-3">
             {agentFindings.map((finding) => (
               <li key={finding.id}>
@@ -239,17 +231,17 @@ export function InvestigationView({ detail }: { detail: InvestigationDetailRespo
                     <dd>{formatUtc(report.observedAt)}</dd>
                     <dt className="text-muted-foreground">Photo</dt>
                     <dd>{report.mediaIds.length ? "Attached, stored privately" : "None"}</dd>
+                    <dt className="text-muted-foreground">Location</dt>
+                    <dd>
+                      ~{investigation.location.latitude.toFixed(2)}, {investigation.location.longitude.toFixed(2)} (±
+                      {precisionKm} km)
+                    </dd>
                     <dt className="text-muted-foreground">Status</dt>
-                    <dd>{report.verification === "unverified" ? "Unverified claim" : "Reviewed"}</dd>
+                    <dd>{report.verification === "unverified" ? "Unverified" : "Reviewed"}</dd>
                   </dl>
                 </CardContent>
               </Card>
             ))}
-            <p className="text-xs text-muted-foreground">
-              Public location: about {investigation.location.latitude.toFixed(2)},{" "}
-              {investigation.location.longitude.toFixed(2)}, within ~{precisionKm} km. The reporter&apos;s identity is
-              never shown.
-            </p>
           </section>
 
           <section className="flex flex-col gap-3" aria-labelledby="activity-heading">
@@ -277,10 +269,6 @@ export function InvestigationView({ detail }: { detail: InvestigationDetailRespo
         </aside>
       </div>
 
-      <p className="text-xs text-muted-foreground">
-        Review decisions are made and recorded by an authorised person, separately from these findings. Nothing here
-        is an official fire confirmation.
-      </p>
     </div>
   );
 }

@@ -2,81 +2,126 @@ import type { Bbox } from "@/lib/embergap/contracts";
 
 /** Web Mercator, as used by OpenStreetMap tiles. */
 export const TILE_SIZE = 256;
+export const MIN_ZOOM = 4;
+export const MAX_ZOOM = 16;
 const MAX_LAT = 85.05112878;
 
+export type Camera = { latitude: number; longitude: number; zoom: number };
+export type Size = { width: number; height: number };
+export type Point = { x: number; y: number };
+
+const worldSize = (zoom: number) => TILE_SIZE * 2 ** zoom;
+const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+
 export function lonToWorldX(lon: number, zoom: number): number {
-  return ((lon + 180) / 360) * TILE_SIZE * 2 ** zoom;
+  return ((lon + 180) / 360) * worldSize(zoom);
 }
 
 export function latToWorldY(lat: number, zoom: number): number {
-  const clamped = Math.max(-MAX_LAT, Math.min(MAX_LAT, lat));
-  const rad = (clamped * Math.PI) / 180;
-  return ((1 - Math.log(Math.tan(rad) + 1 / Math.cos(rad)) / Math.PI) / 2) * TILE_SIZE * 2 ** zoom;
+  const rad = (clamp(lat, -MAX_LAT, MAX_LAT) * Math.PI) / 180;
+  return ((1 - Math.log(Math.tan(rad) + 1 / Math.cos(rad)) / Math.PI) / 2) * worldSize(zoom);
 }
 
-export type MapView = {
-  zoom: number;
-  /** World-pixel position of the view's top-left corner. */
-  originX: number;
-  originY: number;
-  width: number;
-  height: number;
-};
-
-/** The largest whole zoom at which `bbox` fits in width x height, centred. */
-export function fitBbox(bbox: Bbox, width: number, height: number, maxZoom = 14): MapView {
-  let zoom = 0;
-  for (let z = maxZoom; z >= 0; z -= 1) {
-    const w = lonToWorldX(bbox.maxLongitude, z) - lonToWorldX(bbox.minLongitude, z);
-    const h = latToWorldY(bbox.minLatitude, z) - latToWorldY(bbox.maxLatitude, z);
-    if (w <= width && h <= height) {
-      zoom = z;
-      break;
-    }
-  }
-  const centreX = (lonToWorldX(bbox.minLongitude, zoom) + lonToWorldX(bbox.maxLongitude, zoom)) / 2;
-  const centreY = (latToWorldY(bbox.minLatitude, zoom) + latToWorldY(bbox.maxLatitude, zoom)) / 2;
-  return { zoom, originX: centreX - width / 2, originY: centreY - height / 2, width, height };
+export function worldXToLon(x: number, zoom: number): number {
+  return (x / worldSize(zoom)) * 360 - 180;
 }
 
-/** Position inside the view as percentages, so the map scales with its container. */
-export function project(view: MapView, latitude: number, longitude: number): { left: number; top: number } {
+export function worldYToLat(y: number, zoom: number): number {
+  const n = Math.PI * (1 - (2 * y) / worldSize(zoom));
+  return (Math.atan(Math.sinh(n)) * 180) / Math.PI;
+}
+
+/** Metres per screen pixel at this latitude and zoom. */
+export function metresPerPixel(latitude: number, zoom: number): number {
+  return (156_543.03392 * Math.cos((latitude * Math.PI) / 180)) / 2 ** zoom;
+}
+
+function normalise(camera: Camera): Camera {
   return {
-    left: ((lonToWorldX(longitude, view.zoom) - view.originX) / view.width) * 100,
-    top: ((latToWorldY(latitude, view.zoom) - view.originY) / view.height) * 100,
+    latitude: clamp(camera.latitude, -MAX_LAT, MAX_LAT),
+    longitude: ((((camera.longitude + 180) % 360) + 360) % 360) - 180,
+    zoom: clamp(camera.zoom, MIN_ZOOM, MAX_ZOOM),
   };
 }
 
-export type Tile = {
-  key: string;
-  url: string;
-  left: number;
-  top: number;
-  width: number;
-  height: number;
-};
+/** The camera that fits `bbox` in the view with some padding (fractional zoom). */
+export function fitCamera(bbox: Bbox, size: Size, padding = 32): Camera {
+  const width = Math.max(1, size.width - padding * 2);
+  const height = Math.max(1, size.height - padding * 2);
+  const dx = lonToWorldX(bbox.maxLongitude, 0) - lonToWorldX(bbox.minLongitude, 0);
+  const dy = latToWorldY(bbox.minLatitude, 0) - latToWorldY(bbox.maxLatitude, 0);
+  const zoom = Math.log2(Math.min(width / dx, height / dy));
+  const centreX = (lonToWorldX(bbox.minLongitude, 0) + lonToWorldX(bbox.maxLongitude, 0)) / 2;
+  const centreY = (latToWorldY(bbox.minLatitude, 0) + latToWorldY(bbox.maxLatitude, 0)) / 2;
+  return normalise({ latitude: worldYToLat(centreY, 0), longitude: worldXToLon(centreX, 0), zoom });
+}
 
-/** The tiles covering the view, positioned and sized as percentages. */
-export function tilesFor(view: MapView, template: string): Tile[] {
-  const count = 2 ** view.zoom;
-  const firstX = Math.floor(view.originX / TILE_SIZE);
-  const lastX = Math.floor((view.originX + view.width) / TILE_SIZE);
-  const firstY = Math.max(0, Math.floor(view.originY / TILE_SIZE));
-  const lastY = Math.min(count - 1, Math.floor((view.originY + view.height) / TILE_SIZE));
+/** Screen position (px from the view's top-left) of a point. */
+export function toScreen(camera: Camera, size: Size, latitude: number, longitude: number): Point {
+  return {
+    x: lonToWorldX(longitude, camera.zoom) - lonToWorldX(camera.longitude, camera.zoom) + size.width / 2,
+    y: latToWorldY(latitude, camera.zoom) - latToWorldY(camera.latitude, camera.zoom) + size.height / 2,
+  };
+}
+
+export function toLatLon(camera: Camera, size: Size, point: Point): { latitude: number; longitude: number } {
+  const x = lonToWorldX(camera.longitude, camera.zoom) + point.x - size.width / 2;
+  const y = latToWorldY(camera.latitude, camera.zoom) + point.y - size.height / 2;
+  return { latitude: worldYToLat(y, camera.zoom), longitude: worldXToLon(x, camera.zoom) };
+}
+
+/** Moves the camera by a screen-pixel drag. */
+export function panBy(camera: Camera, dx: number, dy: number): Camera {
+  const x = lonToWorldX(camera.longitude, camera.zoom) - dx;
+  const y = latToWorldY(camera.latitude, camera.zoom) - dy;
+  return normalise({ ...camera, longitude: worldXToLon(x, camera.zoom), latitude: worldYToLat(y, camera.zoom) });
+}
+
+/** Zooms so the map point under `anchor` stays under it. */
+export function zoomAround(camera: Camera, size: Size, zoom: number, anchor: Point): Camera {
+  const next = clamp(zoom, MIN_ZOOM, MAX_ZOOM);
+  const target = toLatLon(camera, size, anchor);
+  const zoomed = { ...camera, zoom: next };
+  const moved = toScreen(zoomed, size, target.latitude, target.longitude);
+  return panBy(zoomed, anchor.x - moved.x, anchor.y - moved.y);
+}
+
+/** The visible area. */
+export function viewBbox(camera: Camera, size: Size): Bbox {
+  const topLeft = toLatLon(camera, size, { x: 0, y: 0 });
+  const bottomRight = toLatLon(camera, size, { x: size.width, y: size.height });
+  return {
+    minLongitude: clamp(topLeft.longitude, -180, 180),
+    minLatitude: clamp(bottomRight.latitude, -90, 90),
+    maxLongitude: clamp(bottomRight.longitude, -180, 180),
+    maxLatitude: clamp(topLeft.latitude, -90, 90),
+  };
+}
+
+export type Tile = { key: string; url: string; x: number; y: number; size: number };
+
+/** Tiles covering the view, in screen pixels. Uses the nearest whole zoom, scaled. */
+export function tilesFor(camera: Camera, size: Size, template: string): Tile[] {
+  const tileZoom = Math.round(camera.zoom);
+  const scale = 2 ** (camera.zoom - tileZoom);
+  const tilePx = TILE_SIZE * scale;
+  const count = 2 ** tileZoom;
+  const originX = lonToWorldX(camera.longitude, tileZoom) * scale - size.width / 2;
+  const originY = latToWorldY(camera.latitude, tileZoom) * scale - size.height / 2;
+  const firstX = Math.floor(originX / tilePx);
+  const lastX = Math.floor((originX + size.width) / tilePx);
+  const firstY = Math.max(0, Math.floor(originY / tilePx));
+  const lastY = Math.min(count - 1, Math.floor((originY + size.height) / tilePx));
   const tiles: Tile[] = [];
   for (let x = firstX; x <= lastX; x += 1) {
     for (let y = firstY; y <= lastY; y += 1) {
       const wrappedX = ((x % count) + count) % count;
       tiles.push({
-        key: `${view.zoom}/${x}/${y}`,
-        url: template
-          .replace("{z}", String(view.zoom))
-          .replace("{x}", String(wrappedX))
-          .replace("{y}", String(y)),
-        left: ((x * TILE_SIZE - view.originX) / view.width) * 100,
-        top: ((y * TILE_SIZE - view.originY) / view.height) * 100,
-        width: (TILE_SIZE / view.width) * 100,
-        height: (TILE_SIZE / view.height) * 100,
+        key: `${tileZoom}/${x}/${y}`,
+        url: template.replace("{z}", String(tileZoom)).replace("{x}", String(wrappedX)).replace("{y}", String(y)),
+        x: Math.round(x * tilePx - originX),
+        y: Math.round(y * tilePx - originY),
+        size: Math.ceil(tilePx) + 1,
       });
     }
   }
