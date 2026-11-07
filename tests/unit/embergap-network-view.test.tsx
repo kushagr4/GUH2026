@@ -75,6 +75,6 @@ describe("NetworkView", () => {
     expect(screen.getByText(/Step 1 of 5/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /Next/ }));
     expect(screen.getByText(/Step 2 of 5/)).toBeTruthy();
-    expect(screen.getAllByText(/cut off, still working/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/cut off, still working/i).length).toBeGreaterThan(0);
   });
 });
