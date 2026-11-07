@@ -29,9 +29,16 @@ describe("Docker-free workflow", () => {
     }
   });
 
-  it("the CI workflow does not depend on one", () => {
-    const workflow = readFileSync(".github/workflows/ci.yml", "utf8");
-    expect(workflow).not.toMatch(FORBIDDEN);
+  it("no CI workflow depends on one", () => {
+    for (const file of scriptFiles(".github/workflows")) {
+      expect(readFileSync(file, "utf8"), file).not.toMatch(FORBIDDEN);
+    }
+  });
+
+  it("the Claude Code hooks never call one", () => {
+    for (const file of scriptFiles(".claude/hooks")) {
+      expect(readFileSync(file, "utf8"), file).not.toMatch(FORBIDDEN);
+    }
   });
 
   it("no script resets the shared database", () => {

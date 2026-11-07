@@ -6,11 +6,7 @@ The team shares one database, so the frontend and the schema have different rule
 
 Everyone has their own branch, dev server and `.env.local`, so this work can't disturb anyone else.
 
-1. `git switch -c feature/short-name`
-2. Build it, and commit small.
-3. Run `npm run validate` before opening a PR if you changed anything risky.
-4. Open a PR. CI runs lint, types, tests, the migration lint, the secret scan, the build and the smoke tests.
-5. Merge quickly. Keep `main` demoable at all times.
+Every change goes through a focused branch and a pull request that needs green **PR Checks** and one approval from someone other than its author. The steps are in [development-workflow.md](development-workflow.md). Keep `main` demoable at all times.
 
 ## Migration ownership
 
@@ -28,7 +24,7 @@ Everyone has their own branch, dev server and `.env.local`, so this work can't d
 
 To hand over, change `supabase/MIGRATION_OWNER` in a PR, invite the new owner to the Supabase organisation, and have them run the first three steps of [supabase-setup.md](supabase-setup.md).
 
-`.github/CODEOWNERS` requests the owner's review for `supabase/`. GitHub doesn't enforce required reviews on private repos on the free plan, so treat that as a team rule.
+`.github/CODEOWNERS` names the owner as the reviewer for `supabase/`. GitHub can't enforce reviews on this private repo's plan, and may not request them automatically, so request the owner by hand and treat it as a team rule ([ci-and-reviews.md](ci-and-reviews.md#the-review-rule)).
 
 ## Changing the schema
 
@@ -36,7 +32,8 @@ To hand over, change `supabase/MIGRATION_OWNER` in a PR, invite the new owner to
 2. **Write it.** The template includes the required grants, RLS and policies.
 3. **Check it:** `npm run db:lint`
 4. **Open a PR** containing only that migration and the code that needs it.
-5. **The owner reviews and merges,** then applies it and commits the new types:
+5. **The owner reviews it** (or, for the owner's own migration, a teammate does), and it's merged once approved.
+6. **The owner applies it** from an up-to-date `main`. `db:push` refuses to run anywhere else:
 
 ```bash
 git switch main
@@ -58,7 +55,25 @@ npm run db:push
 npm run db:types
 ```
 
-6. **The owner pushes the types** to `main`, and teammates pull.
+7. **The owner opens a PR with the new types**, like any other change, rather than pushing to `main`:
+
+```bash
+git switch -c chore/db-types
+```
+
+```bash
+git commit -am "chore(db): update generated types"
+```
+
+```bash
+git push -u origin HEAD
+```
+
+```bash
+gh pr create --fill
+```
+
+A teammate approves it quickly, and everyone pulls once it's merged.
 
 ### Keeping your code working until the migration lands
 

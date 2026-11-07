@@ -1,2 +1,20 @@
-# The migration owner reviews everything that can change the shared database.
-/supabase/ @kushagr4
+# Who to ask for a review. GitHub uses the version of this file on main.
+#
+# Every PR needs one approval from someone other than its author. On this repo's
+# current GitHub plan that's a team rule, not something GitHub enforces, and
+# these lines may not trigger automatic review requests (docs/ci-and-reviews.md).
+# Request a reviewer by hand if none is added.
+#
+# Don't turn on "Require review from Code Owners": the author of a PR can't
+# approve it, so a path whose only owner is its author could never be merged.
+
+# Everything: either teammate can review.
+*                       @kushagr4 @d3vmakes
+
+# The shared database, migrations and the owner file: the migration owner
+# (supabase/MIGRATION_OWNER) reviews teammates' changes here.
+/supabase/              @kushagr4
+
+# CI, review tooling and the Claude Code workflow.
+/.github/               @kushagr4 @d3vmakes
+/.claude/               @kushagr4 @d3vmakes
