@@ -1,21 +1,22 @@
-import type { Bbox } from "./types";
+import type { Bbox } from "@/lib/embergap/contracts";
 
 /**
- * Map presets. The places are real so the map is recognisable, but every
- * report and investigation shown in demo mode is SYNTHETIC.
+ * Map presets around the shared synthetic scenarios (all in the Pennines).
+ * The places are real so the map is recognisable; every report and
+ * investigation shown in demo mode is SYNTHETIC.
  */
 export type MapRegion = { id: string; name: string; bbox: Bbox };
 
 export const DEMO_REGIONS: readonly MapRegion[] = [
   {
-    id: "peak-district",
-    name: "Peak District, UK",
-    bbox: { minLon: -2.15, minLat: 53.25, maxLon: -1.55, maxLat: 53.6 },
+    id: "pennines",
+    name: "South Pennines (all scenarios)",
+    bbox: { minLongitude: -2.75, minLatitude: 53.3, maxLongitude: -1.55, maxLatitude: 54.0 },
   },
   {
-    id: "sierra-foothills",
-    name: "Sierra Nevada foothills, California",
-    bbox: { minLon: -121.3, minLat: 38.6, maxLon: -120.3, maxLat: 39.2 },
+    id: "peak-district",
+    name: "Dark Peak close-up",
+    bbox: { minLongitude: -2.15, minLatitude: 53.35, maxLongitude: -1.7, maxLatitude: 53.65 },
   },
 ];
 

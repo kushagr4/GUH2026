@@ -3,7 +3,7 @@ import { z } from "zod";
 import { readIntegrationEnv, type EnvSource } from "@/lib/integrations/env";
 import { createApiClient, type ApiClient } from "@/lib/integrations/http";
 import { formatBbox } from "./bbox";
-import { FIRMS_SOURCES, type Bbox, type DataMode, type FirmsSource } from "./types";
+import { FIRMS_SOURCES, type Bbox, type FirmsSource } from "./types";
 
 /**
  * NASA FIRMS area API (https://firms.modaps.eosdis.nasa.gov/api/area/), checked
@@ -33,7 +33,7 @@ export const FIRMS_ENV = {
 } as const;
 
 /** Demo unless EMBERGAP_FIRMS_MODE=live. Live mode never falls back to fixtures. */
-export function getFirmsMode(env: EnvSource = process.env): DataMode {
+export function getFirmsMode(env: EnvSource = process.env): "demo" | "live" {
   return env.EMBERGAP_FIRMS_MODE?.trim().toLowerCase() === "live" ? "live" : "demo";
 }
 

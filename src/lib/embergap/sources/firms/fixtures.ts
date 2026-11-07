@@ -1,136 +1,106 @@
-import type { FirmsConfidence, FirmsDetection, FirmsSource } from "./types";
+import { SYNTHETIC_NOW, syntheticId } from "@/lib/embergap/contracts";
+import type { FirmsDetection, FirmsEvidence, FirmsSource } from "./types";
 
 /**
- * SYNTHETIC DEMO DATA. None of these detections happened. They are placed in
- * two demo regions so the map, the investigations and the "missing satellite
- * pass" case can be shown offline and deterministically. Times are relative
- * to `now`, so the demo always looks current and tests stay repeatable.
+ * SYNTHETIC DEMO DATA. None of these detections happened. They sit next to
+ * the shared SYNTHETIC_SCENARIOS from the contracts, at fixed times before
+ * SYNTHETIC_NOW, so the demo and the tests are deterministic:
+ *
+ * - corroborated-smoke: two adjacent VIIRS pixels 13 minutes before the report
+ * - weather-timeout: one MODIS detection before the report
+ * - repeated-witness: one VIIRS detection before the reports
+ * - partition-recovery: one VIIRS detection before the report
+ * - missing-satellite-pass and misleading-photo: deliberately none nearby
+ * - one unlinked night detection, old enough to be stale
  */
-type FixtureRow = {
+type Row = {
   key: string;
   product: FirmsSource;
-  satellite: string;
-  instrument: string;
   latitude: number;
   longitude: number;
-  minutesAgo: number;
-  confidence: FirmsConfidence;
-  confidenceRaw: string;
-  frpMw: number;
-  brightnessK: number;
-  dayNight: "day" | "night";
+  observedAt: string;
+  evidence: Omit<FirmsEvidence, "distanceKm">;
 };
 
-const ROWS: FixtureRow[] = [
-  // Peak District demo region: two adjacent VIIRS pixels from one overpass,
-  // near the corroborated synthetic report (demo-inv-ridge).
+const VIIRS = { instrument: "VIIRS", version: "2.0NRT", scanKm: 0.39, trackKm: 0.36 } as const;
+
+const ROWS: Row[] = [
   {
-    key: "pd-ridge-1",
+    key: "corroborated-smoke/detection-1",
     product: "VIIRS_SNPP_NRT",
-    satellite: "N",
-    instrument: "VIIRS",
-    latitude: 53.4561,
-    longitude: -1.8724,
-    minutesAgo: 48,
-    confidence: "high",
-    confidenceRaw: "h",
-    frpMw: 6.4,
-    brightnessK: 338.2,
-    dayNight: "day",
+    latitude: 53.5491,
+    longitude: -1.9772,
+    observedAt: "2026-11-07T08:52:00.000Z",
+    evidence: { ...VIIRS, satellite: "N", confidence: "high", frpMegawatts: 6.4, brightnessKelvin: 338.2, dayNight: "day" },
   },
   {
-    key: "pd-ridge-2",
+    key: "corroborated-smoke/detection-2",
     product: "VIIRS_SNPP_NRT",
-    satellite: "N",
-    instrument: "VIIRS",
-    latitude: 53.4549,
-    longitude: -1.8767,
-    minutesAgo: 48,
-    confidence: "nominal",
-    confidenceRaw: "n",
-    frpMw: 3.1,
-    brightnessK: 329.7,
-    dayNight: "day",
+    latitude: 53.5482,
+    longitude: -1.9809,
+    observedAt: "2026-11-07T08:52:00.000Z",
+    evidence: { ...VIIRS, satellite: "N", confidence: "nominal", frpMegawatts: 3.1, brightnessKelvin: 329.7, dayNight: "day" },
   },
-  // An anomaly with no report attached, to show the map is not report-only.
   {
-    key: "pd-moor-night",
-    product: "VIIRS_NOAA20_NRT",
-    satellite: "1",
-    instrument: "VIIRS",
-    latitude: 53.5121,
-    longitude: -2.0313,
-    minutesAgo: 5 * 60 + 12,
-    confidence: "low",
-    confidenceRaw: "l",
-    frpMw: 1.2,
-    brightnessK: 301.4,
-    dayNight: "night",
-  },
-  // Sierra foothills demo region: MODIS and VIIRS near the repeated-witness
-  // synthetic report (demo-inv-witness).
-  {
-    key: "sf-valley-modis",
+    key: "weather-timeout/detection-1",
     product: "MODIS_NRT",
-    satellite: "Aqua",
-    instrument: "MODIS",
-    latitude: 38.7471,
-    longitude: -121.0552,
-    minutesAgo: 3 * 60 + 10,
-    confidence: "nominal",
-    confidenceRaw: "62",
-    frpMw: 14.8,
-    brightnessK: 322.5,
-    dayNight: "day",
+    latitude: 53.6043,
+    longitude: -1.9268,
+    observedAt: "2026-11-07T10:31:00.000Z",
+    evidence: {
+      instrument: "MODIS",
+      satellite: "Terra",
+      confidence: 64,
+      frpMegawatts: 12.2,
+      brightnessKelvin: 321.4,
+      dayNight: "day",
+      version: "6.1NRT",
+      scanKm: 1.1,
+      trackKm: 1.0,
+    },
   },
   {
-    key: "sf-valley-viirs",
+    key: "repeated-witness/detection-1",
     product: "VIIRS_NOAA20_NRT",
-    satellite: "1",
-    instrument: "VIIRS",
-    latitude: 38.7462,
-    longitude: -121.0571,
-    minutesAgo: 2 * 60 + 5,
-    confidence: "high",
-    confidenceRaw: "h",
-    frpMw: 9.6,
-    brightnessK: 341.0,
-    dayNight: "day",
+    latitude: 53.9152,
+    longitude: -1.8287,
+    observedAt: "2026-11-07T11:02:00.000Z",
+    evidence: { ...VIIRS, satellite: "1", confidence: "nominal", frpMegawatts: 2.7, brightnessKelvin: 327.9, dayNight: "day" },
   },
-  // Old enough to show as stale.
   {
-    key: "sf-ridge-old",
-    product: "VIIRS_SNPP_NRT",
-    satellite: "N",
-    instrument: "VIIRS",
-    latitude: 39.1052,
-    longitude: -120.4518,
-    minutesAgo: 20 * 60 + 30,
-    confidence: "nominal",
-    confidenceRaw: "n",
-    frpMw: 2.2,
-    brightnessK: 318.9,
-    dayNight: "night",
+    key: "partition-recovery/detection-1",
+    product: "VIIRS_NOAA21_NRT",
+    latitude: 53.4641,
+    longitude: -1.8496,
+    observedAt: "2026-11-07T11:38:00.000Z",
+    evidence: { ...VIIRS, satellite: "2", confidence: "high", frpMegawatts: 9.6, brightnessKelvin: 341.0, dayNight: "day" },
+  },
+  {
+    key: "unlinked/night-detection",
+    product: "VIIRS_NOAA20_NRT",
+    latitude: 53.7012,
+    longitude: -2.1043,
+    observedAt: "2026-11-06T23:40:00.000Z",
+    evidence: { ...VIIRS, satellite: "1", confidence: "low", frpMegawatts: 1.2, brightnessKelvin: 301.4, dayNight: "night" },
   },
 ];
 
-export function demoFirmsDetections(now: Date): FirmsDetection[] {
-  const retrievedAt = now.toISOString();
+export function demoFirmsDetections(): FirmsDetection[] {
   return ROWS.map((row) => ({
-    id: `firms:demo:${row.key}`,
-    source: "firms",
+    id: syntheticId(`outrolife/firms/${row.key}`),
     product: row.product,
-    satellite: row.satellite,
-    instrument: row.instrument,
     latitude: row.latitude,
     longitude: row.longitude,
-    observedAt: new Date(now.getTime() - row.minutesAgo * 60_000).toISOString(),
-    retrievedAt,
-    confidence: row.confidence,
-    confidenceRaw: row.confidenceRaw,
-    frpMw: row.frpMw,
-    brightnessK: row.brightnessK,
-    dayNight: row.dayNight,
-    synthetic: true,
+    observedAt: row.observedAt,
+    retrievedAt: SYNTHETIC_NOW,
+    evidence: { ...row.evidence, distanceKm: null },
+    isSynthetic: true,
   }));
+}
+
+/** The detection IDs for a scenario, for linking investigation evidence. */
+export function demoDetectionIds(scenario: string): string[] {
+  return ROWS.filter((row) => row.key.startsWith(`${scenario}/`)).map((row) =>
+    syntheticId(`outrolife/firms/${row.key}`),
+  );
 }

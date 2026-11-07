@@ -1,4 +1,4 @@
-import type { Bbox } from "@/lib/embergap/read/types";
+import type { Bbox } from "@/lib/embergap/contracts";
 
 /** Web Mercator, as used by OpenStreetMap tiles. */
 export const TILE_SIZE = 256;
@@ -27,15 +27,15 @@ export type MapView = {
 export function fitBbox(bbox: Bbox, width: number, height: number, maxZoom = 14): MapView {
   let zoom = 0;
   for (let z = maxZoom; z >= 0; z -= 1) {
-    const w = lonToWorldX(bbox.maxLon, z) - lonToWorldX(bbox.minLon, z);
-    const h = latToWorldY(bbox.minLat, z) - latToWorldY(bbox.maxLat, z);
+    const w = lonToWorldX(bbox.maxLongitude, z) - lonToWorldX(bbox.minLongitude, z);
+    const h = latToWorldY(bbox.minLatitude, z) - latToWorldY(bbox.maxLatitude, z);
     if (w <= width && h <= height) {
       zoom = z;
       break;
     }
   }
-  const centreX = (lonToWorldX(bbox.minLon, zoom) + lonToWorldX(bbox.maxLon, zoom)) / 2;
-  const centreY = (latToWorldY(bbox.minLat, zoom) + latToWorldY(bbox.maxLat, zoom)) / 2;
+  const centreX = (lonToWorldX(bbox.minLongitude, zoom) + lonToWorldX(bbox.maxLongitude, zoom)) / 2;
+  const centreY = (latToWorldY(bbox.minLatitude, zoom) + latToWorldY(bbox.maxLatitude, zoom)) / 2;
   return { zoom, originX: centreX - width / 2, originY: centreY - height / 2, width, height };
 }
 

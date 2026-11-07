@@ -2,7 +2,7 @@
 
 import { Fragment, useMemo, useState } from "react";
 import { cn } from "cn";
-import type { Bbox, MapFeature, ReviewPriority } from "@/lib/embergap/read/types";
+import type { Bbox, MapFeature } from "@/lib/embergap/contracts";
 import { fitBbox, project, tilesFor } from "./projection";
 
 /** The map's own coordinate space. The rendered map scales to its container. */
@@ -16,28 +16,42 @@ const VIEW_HEIGHT = 520;
  */
 const TILE_TEMPLATE = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
 
-const PRIORITY_COLOUR: Record<ReviewPriority, string> = {
-  high: "bg-red-600",
-  medium: "bg-amber-500",
-  low: "bg-sky-500",
-  undetermined: "bg-slate-500",
-};
+function priorityColour(priority: MapFeature["reviewPriority"]): string {
+  if (priority === "high") return "bg-red-600";
+  if (priority === "medium") return "bg-yellow-400";
+  if (priority === "low") return "bg-sky-500";
+  return "bg-slate-500";
+}
 
 function anomalyClass(feature: MapFeature): string {
-  if (feature.freshness === "stale") return "bg-stone-400";
-  if (feature.freshness === "recent") return "bg-orange-300";
-  return "bg-orange-500";
+  return feature.freshness === "available" ? "bg-orange-500" : "bg-stone-400";
 }
 
 function anomalySize(feature: MapFeature): number {
-  if (feature.confidence === "high") return 14;
-  if (feature.confidence === "nominal") return 12;
+  const confidence = feature.firms?.confidence ?? null;
+  if (confidence === "high" || (typeof confidence === "number" && confidence >= 80)) return 14;
+  if (confidence === "nominal" || (typeof confidence === "number" && confidence >= 30)) return 12;
   return 10;
+}
+
+/**
+ * A CSS percentage rounded to 2 decimals. Browsers store long decimals at
+ * reduced precision, which would make server and client markup differ.
+ */
+function pct(value: number): string {
+  return `${Math.round(value * 100) / 100}%`;
 }
 
 /** Metres per world pixel at this latitude and zoom (Web Mercator). */
 function metresPerPixel(latitude: number, zoom: number): number {
   return (156_543.03392 * Math.cos((latitude * Math.PI) / 180)) / 2 ** zoom;
+}
+
+export function featureTitle(feature: MapFeature): string {
+  if (feature.kind === "investigation") {
+    return feature.investigation?.isSynthetic ? "Synthetic investigation" : "Investigation";
+  }
+  return `Thermal anomaly (${feature.firms?.instrument ?? feature.provenance.product ?? "FIRMS"})`;
 }
 
 export function ThermalMap({
@@ -90,27 +104,27 @@ export function ThermalMap({
               referrerPolicy="strict-origin-when-cross-origin"
               className="pointer-events-none absolute max-w-none select-none opacity-90 dark:opacity-60 dark:invert dark:hue-rotate-180"
               style={{
-                left: `${tile.left}%`,
-                top: `${tile.top}%`,
-                width: `${tile.width}%`,
-                height: `${tile.height}%`,
+                left: pct(tile.left),
+                top: pct(tile.top),
+                width: pct(tile.width),
+                height: pct(tile.height),
               }}
               onError={() => setFailedTiles((previous) => new Set(previous).add(tile.key))}
             />
           ))}
 
         {ordered.map((feature) => {
-          const position = project(view, feature.latitude, feature.longitude);
+          const { latitude, longitude, precisionMeters } = feature.location;
+          const position = project(view, latitude, longitude);
           if (position.left < -2 || position.left > 102 || position.top < -2 || position.top > 102) {
             return null;
           }
           const selected = feature.id === selectedId;
           const isInvestigation = feature.kind === "investigation";
           // Diameter in view pixels of a circle whose radius is the location precision.
-          const haloPx = isInvestigation
-            ? (2 * feature.locationPrecisionKm * 1000) / metresPerPixel(feature.latitude, view.zoom)
-            : 0;
+          const haloPx = isInvestigation ? (2 * precisionMeters) / metresPerPixel(latitude, view.zoom) : 0;
           const size = isInvestigation ? 20 : anomalySize(feature);
+          const title = featureTitle(feature);
 
           return (
             <Fragment key={feature.id}>
@@ -122,32 +136,27 @@ export function ThermalMap({
                   aria-hidden
                   className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-dashed border-foreground/50 bg-foreground/10"
                   style={{
-                    left: `${position.left}%`,
-                    top: `${position.top}%`,
-                    width: `max(${(haloPx / VIEW_WIDTH) * 100}%, ${size + 18}px)`,
+                    left: pct(position.left),
+                    top: pct(position.top),
+                    width: `max(${pct((haloPx / VIEW_WIDTH) * 100)}, ${size + 18}px)`,
                     aspectRatio: "1",
                   }}
                 />
               ) : null}
-              <div
-                className="absolute"
-                style={{ left: `${position.left}%`, top: `${position.top}%` }}
-              >
-              <button
-                type="button"
-                aria-label={`${feature.title}${isInvestigation ? "" : `, ${feature.freshness}`}`}
-                aria-pressed={selected}
-                title={feature.title}
-                onClick={() => onSelect(feature.id)}
-                className={cn(
-                  "absolute -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow-md transition-transform hover:scale-125 focus-visible:scale-125 focus-visible:outline-none dark:border-neutral-900",
-                  isInvestigation
-                    ? PRIORITY_COLOUR[feature.priority ?? "undetermined"]
-                    : anomalyClass(feature),
-                  selected && "scale-125 ring-4 ring-foreground/70",
-                )}
-                style={{ width: size, height: size }}
-              />
+              <div className="absolute" style={{ left: pct(position.left), top: pct(position.top) }}>
+                <button
+                  type="button"
+                  aria-label={title}
+                  aria-pressed={selected}
+                  title={title}
+                  onClick={() => onSelect(feature.id)}
+                  className={cn(
+                    "absolute -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow-md transition-transform hover:scale-125 focus-visible:scale-125 focus-visible:outline-none dark:border-neutral-900",
+                    isInvestigation ? priorityColour(feature.reviewPriority) : anomalyClass(feature),
+                    selected && "scale-125 ring-4 ring-foreground/70",
+                  )}
+                  style={{ width: size, height: size }}
+                />
               </div>
             </Fragment>
           );
@@ -175,24 +184,23 @@ export function ThermalMap({
 }
 
 export function MapLegend() {
-  const item = (swatch: string, label: string, extra?: string) => (
+  const item = (swatch: string, label: string) => (
     <li className="flex items-center gap-2">
-      <span aria-hidden className={cn("inline-block size-3 rounded-full border border-white shadow", swatch, extra)} />
+      <span aria-hidden className={cn("inline-block size-3 rounded-full border border-white shadow", swatch)} />
       {label}
     </li>
   );
   return (
     <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground" aria-label="Map legend">
       {item("bg-red-600", "Investigation: high review priority")}
-      {item("bg-amber-500", "Medium")}
+      {item("bg-yellow-400", "Medium")}
       {item("bg-sky-500", "Low")}
-      {item("bg-slate-500", "Undetermined")}
-      {item("bg-orange-500", "Thermal anomaly, under 3 h old")}
-      {item("bg-orange-300", "3 to 12 h")}
-      {item("bg-stone-400", "Older")}
+      {item("bg-slate-500", "Not set")}
+      {item("bg-orange-500", "Thermal anomaly, within 12 h")}
+      {item("bg-stone-400", "Older (stale)")}
       <li className="flex items-center gap-2">
         <span aria-hidden className="inline-block size-3 rounded-full border-2 border-dashed border-foreground/40" />
-        Approximate report area
+        Approximate investigation area
       </li>
     </ul>
   );

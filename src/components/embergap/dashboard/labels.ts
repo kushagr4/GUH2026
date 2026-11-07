@@ -1,11 +1,14 @@
 import type {
-  AgentId,
+  AgentEventType,
   Assessment,
-  Freshness,
+  EventActor,
+  EvidenceStrength,
+  FirmsDetectionConfidence,
   InvestigationStatus,
   ReviewPriority,
+  SourceKind,
   SourceState,
-} from "@/lib/embergap/read/types";
+} from "./label-types";
 
 /** Badge colours. Kept as Tailwind classes so they work with the neutral theme. */
 export type Tone = "danger" | "warning" | "info" | "success" | "neutral";
@@ -36,37 +39,42 @@ export const STATUS_TONE: Record<InvestigationStatus, Tone> = {
   reviewed: "success",
 };
 
-export const PRIORITY_LABEL: Record<ReviewPriority, string> = {
-  high: "High review priority",
-  medium: "Medium review priority",
-  low: "Low review priority",
-  undetermined: "Priority undetermined",
-};
+export function priorityLabel(priority: ReviewPriority | null): string {
+  return priority ? `${priority[0]!.toUpperCase()}${priority.slice(1)} review priority` : "Priority not set";
+}
 
-export const PRIORITY_TONE: Record<ReviewPriority, Tone> = {
-  high: "danger",
-  medium: "warning",
-  low: "info",
-  undetermined: "neutral",
-};
+export function priorityTone(priority: ReviewPriority | null): Tone {
+  if (priority === "high") return "danger";
+  if (priority === "medium") return "warning";
+  if (priority === "low") return "info";
+  return "neutral";
+}
 
 export const ASSESSMENT_LABEL: Record<Assessment, string> = {
   supports: "Supports",
   contradicts: "Contradicts",
   inconclusive: "Inconclusive",
+  context: "Context",
 };
 
 export const ASSESSMENT_TONE: Record<Assessment, Tone> = {
   supports: "warning",
   contradicts: "info",
   inconclusive: "neutral",
+  context: "neutral",
+};
+
+export const STRENGTH_LABEL: Record<EvidenceStrength, string> = {
+  weak: "weak",
+  moderate: "moderate",
+  strong: "strong",
 };
 
 export const SOURCE_STATE_LABEL: Record<SourceState, string> = {
   available: "Available",
   stale: "Stale",
   unavailable: "Unavailable",
-  not_observed: "Nothing observed (unknown)",
+  not_observed: "Nothing found (unknown)",
 };
 
 export const SOURCE_STATE_TONE: Record<SourceState, Tone> = {
@@ -76,42 +84,63 @@ export const SOURCE_STATE_TONE: Record<SourceState, Tone> = {
   not_observed: "neutral",
 };
 
-export const FRESHNESS_LABEL: Record<Freshness, string> = {
-  fresh: "Fresh",
-  recent: "Recent",
-  stale: "Stale",
+export const SOURCE_LABEL: Record<SourceKind, string> = {
+  human: "Reports",
+  firms: "NASA FIRMS thermal anomalies",
+  weather: "Weather",
+  eonet: "NASA EONET events",
+  vision: "Photo description",
 };
 
-export const AGENT_LABEL: Record<AgentId | "system", string> = {
+export const ACTOR_LABEL: Record<EventActor, string> = {
   vision: "Vision agent",
   satellite: "Satellite agent",
   weather: "Weather agent",
   witness: "Witness agent",
   fusion: "Fusion agent",
   system: "System",
+  reporter: "Reporter",
+  reviewer: "Reviewer",
 };
 
-/** "just now", "12 min ago", "3 h 10 min ago", "2 days ago". */
-export function formatAge(minutes: number): string {
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes} min ago`;
+/** Timeline events that show the partition and recovery story. */
+export const NETWORK_EVENTS: ReadonlySet<AgentEventType> = new Set([
+  "partition_started",
+  "partition_healed",
+  "message_delivered",
+  "message_dropped",
+  "duplicate_ignored",
+  "reconciled",
+]);
+
+/** FIRMS confidence as text: a class, or MODIS's 0-100 scale. Never a percentage. */
+export function confidenceLabel(confidence: FirmsDetectionConfidence): string {
+  if (confidence === null) return "not reported";
+  if (typeof confidence === "number") return `${confidence} on the MODIS 0-100 scale`;
+  return `${confidence} class`;
+}
+
+/** "just now", "12 min", "3 h 10 min", "2 days" before `to`. */
+export function formatDuration(minutes: number): string {
+  if (minutes < 1) return "under a minute";
+  if (minutes < 60) return `${minutes} min`;
   if (minutes < 48 * 60) {
     const hours = Math.floor(minutes / 60);
     const rest = minutes % 60;
-    return rest ? `${hours} h ${rest} min ago` : `${hours} h ago`;
+    return rest ? `${hours} h ${rest} min` : `${hours} h`;
   }
-  return `${Math.floor(minutes / (24 * 60))} days ago`;
+  return `${Math.floor(minutes / (24 * 60))} days`;
 }
 
-export function minutesBetween(fromIso: string, to: Date | string): number {
-  const end = typeof to === "string" ? Date.parse(to) : to.getTime();
-  return Math.max(0, Math.round((end - Date.parse(fromIso)) / 60_000));
+export function minutesBetween(fromIso: string, toIso: string): number {
+  return Math.max(0, Math.round((Date.parse(toIso) - Date.parse(fromIso)) / 60_000));
 }
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 /** "7 Nov, 14:20 UTC". Always UTC, so server and browser render the same text. */
-export function formatUtc(iso: string): string {
+export function formatUtc(iso: string | null): string {
+  if (!iso) return "unknown time";
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "unknown time";
   const hh = String(date.getUTCHours()).padStart(2, "0");
@@ -119,7 +148,7 @@ export function formatUtc(iso: string): string {
   return `${date.getUTCDate()} ${MONTHS[date.getUTCMonth()]}, ${hh}:${mm} UTC`;
 }
 
-/** "thermal_anomaly_nearby" becomes "thermal anomaly nearby". */
+/** "thermal_anomaly_nearby" becomes "thermal anomaly nearby"; namespaces are kept readable. */
 export function humanizeCode(code: string): string {
-  return code.replace(/_/g, " ");
+  return code.replace(/[_.]/g, " ").replace(/\s+/g, " ").trim();
 }

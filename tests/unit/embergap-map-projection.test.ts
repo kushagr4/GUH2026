@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { SYNTHETIC_SCENARIOS } from "@/lib/embergap/contracts";
 import { fitBbox, project, tilesFor } from "@/components/embergap/map/projection";
-import { approximateLocation, freshnessOf } from "@/lib/embergap/read/geo";
-import { DEMO_REGIONS } from "@/lib/embergap/read/regions";
+import { confidenceLabel, formatDuration, formatUtc, humanizeCode } from "@/components/embergap/dashboard/labels";
+import { DEFAULT_REGION, DEMO_REGIONS } from "@/lib/embergap/read/regions";
 
 describe("map projection", () => {
   it.each(DEMO_REGIONS.map((region) => [region.name, region.bbox] as const))(
@@ -10,8 +11,8 @@ describe("map projection", () => {
       const view = fitBbox(bbox, 800, 520);
       expect(view.zoom).toBeGreaterThanOrEqual(8);
       for (const [lat, lon] of [
-        [bbox.minLat, bbox.minLon],
-        [bbox.maxLat, bbox.maxLon],
+        [bbox.minLatitude, bbox.minLongitude],
+        [bbox.maxLatitude, bbox.maxLongitude],
       ] as const) {
         const { left, top } = project(view, lat, lon);
         expect(left).toBeGreaterThanOrEqual(0);
@@ -22,8 +23,19 @@ describe("map projection", () => {
     },
   );
 
+  it("the default region shows every shared scenario", () => {
+    const view = fitBbox(DEFAULT_REGION.bbox, 800, 520);
+    for (const scenario of SYNTHETIC_SCENARIOS) {
+      const { left, top } = project(view, scenario.report.latitude, scenario.report.longitude);
+      expect(left, scenario.id).toBeGreaterThan(0);
+      expect(left, scenario.id).toBeLessThan(100);
+      expect(top, scenario.id).toBeGreaterThan(0);
+      expect(top, scenario.id).toBeLessThan(100);
+    }
+  });
+
   it("covers the whole view with tiles", () => {
-    const view = fitBbox(DEMO_REGIONS[0]!.bbox, 800, 520);
+    const view = fitBbox(DEFAULT_REGION.bbox, 800, 520);
     const tiles = tilesFor(view, "https://tile.example/{z}/{x}/{y}.png");
     expect(tiles.length).toBeGreaterThan(0);
     expect(Math.min(...tiles.map((tile) => tile.left))).toBeLessThanOrEqual(0);
@@ -34,18 +46,18 @@ describe("map projection", () => {
   });
 });
 
-describe("privacy and freshness helpers", () => {
-  it("snaps nearby points to the same cell centre", () => {
-    const a = approximateLocation(53.4532, -1.8791);
-    const b = approximateLocation(53.4599, -1.8701);
-    expect(a).toEqual(b);
-    expect(a.latitude).not.toBe(53.4532);
-    expect(a.precisionKm).toBeCloseTo(2.2, 1);
+describe("labels", () => {
+  it("never shows FIRMS confidence as a percentage", () => {
+    expect(confidenceLabel(62)).not.toContain("%");
+    expect(confidenceLabel("high")).toBe("high class");
+    expect(confidenceLabel(null)).toBe("not reported");
   });
 
-  it("labels freshness by age", () => {
-    expect(freshnessOf(30)).toBe("fresh");
-    expect(freshnessOf(5 * 60)).toBe("recent");
-    expect(freshnessOf(20 * 60)).toBe("stale");
+  it("formats durations, UTC times and codes", () => {
+    expect(formatDuration(0)).toBe("under a minute");
+    expect(formatDuration(190)).toBe("3 h 10 min");
+    expect(formatUtc("2026-11-07T09:05:00.000Z")).toBe("7 Nov, 09:05 UTC");
+    expect(formatUtc(null)).toBe("unknown time");
+    expect(humanizeCode("fusion.rule.S2-two-independent")).toBe("fusion rule S2-two-independent");
   });
 });

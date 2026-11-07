@@ -1,134 +1,84 @@
 import "server-only";
+import {
+  FIRMS_PROVENANCE,
+  SOURCE_MAX_AGE_SECONDS,
+  classifyFreshness,
+  mapModeFor,
+  type InvestigationReadRepository,
+  type MapFeature,
+  type MapQuery,
+  type MapResponse,
+} from "@/lib/embergap/contracts";
 import type { EnvSource } from "@/lib/integrations/env";
-import { bboxContains } from "@/lib/embergap/sources/firms/bbox";
 import { getThermalAnomalies, type ThermalAnomalyDeps } from "@/lib/embergap/sources/firms";
-import { demoInvestigations } from "./demo-investigations";
-import { ageMinutes, approximateLocation, freshnessOf } from "./geo";
-import type { Bbox, MapFeature, MapResponse } from "./types";
+import type { FirmsDetection } from "@/lib/embergap/sources/firms/types";
 
-export const MAP_LIMIT = { default: 50, max: 200 } as const;
-
-export type LimitParseResult = { ok: true; limit: number } | { ok: false; error: string };
-
-export function parseLimit(raw: string | null | undefined): LimitParseResult {
-  if (raw === null || raw === undefined || raw === "") return { ok: true, limit: MAP_LIMIT.default };
-  if (!/^\d{1,4}$/.test(raw)) return { ok: false, error: "limit must be a whole number" };
-  const limit = Number(raw);
-  if (limit < 1 || limit > MAP_LIMIT.max) {
-    return { ok: false, error: `limit must be between 1 and ${MAP_LIMIT.max}` };
-  }
-  return { ok: true, limit };
-}
-
-export type MapQuery = {
-  bbox: Bbox;
-  limit: number;
-  now?: Date;
+export type MapDeps = ThermalAnomalyDeps & {
+  repository: InvestigationReadRepository;
   env?: EnvSource;
+  now?: Date;
   signal?: AbortSignal;
 };
 
-/**
- * The public-safe map projection: thermal anomalies plus investigations, each
- * with an approximate location, freshness, review status and provenance. No
- * report text, photos, reporter identity or exact report coordinates.
- *
- * Investigations come from synthetic demo fixtures until Claude Mac's
- * repository interface lands; then this reads through it, under RLS.
- */
-export async function getMapData(query: MapQuery, deps: ThermalAnomalyDeps = {}): Promise<MapResponse> {
-  const now = query.now ?? new Date();
-  const firms = await getThermalAnomalies(
-    { bbox: query.bbox, now, env: query.env, signal: query.signal },
-    deps,
-  );
+export class MapReadError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "MapReadError";
+  }
+}
 
-  const anomalies: MapFeature[] = firms.detections.map((detection) => {
-    const age = ageMinutes(detection.observedAt, now);
-    return {
-      id: detection.id,
-      kind: "thermal_anomaly",
-      title: `Thermal anomaly (${detection.instrument ?? detection.product})`,
+function anomalyFeature(detection: FirmsDetection, checkedAt: string): MapFeature {
+  // FIRMS pixels are public data: they keep their own ~375 m to 1 km precision.
+  const pixelKm = Math.max(detection.evidence.scanKm ?? 0.375, detection.evidence.trackKm ?? 0.375);
+  return {
+    id: detection.id,
+    kind: "thermal_anomaly",
+    location: {
       latitude: detection.latitude,
       longitude: detection.longitude,
-      locationPrecisionKm: detection.instrument === "MODIS" ? 1 : 0.4,
-      observedAt: detection.observedAt,
-      ageMinutes: age,
-      freshness: freshnessOf(age),
-      reviewStatus: null,
-      priority: null,
-      provenance: {
-        source: "firms",
-        mode: firms.mode,
-        label: detection.synthetic
-          ? "Synthetic FIRMS-style detection (demo)"
-          : `NASA FIRMS ${detection.product}`,
-      },
-      investigationId: null,
-      confidence: detection.confidence,
-      frpMw: detection.frpMw,
-    };
-  });
+      precisionMeters: Math.max(1, Math.round((pixelKm * 1000) / 2)),
+    },
+    investigationId: null,
+    status: null,
+    reviewOutcome: null,
+    reviewPriority: null,
+    observedAt: detection.observedAt,
+    freshness: classifyFreshness({
+      latestObservedAt: detection.observedAt,
+      checkedAt,
+      maxAgeSeconds: SOURCE_MAX_AGE_SECONDS.firms,
+    }),
+    sources: ["firms"],
+    provenance: { ...FIRMS_PROVENANCE, product: detection.product, isSynthetic: detection.isSynthetic },
+    firms: detection.evidence,
+    investigation: null,
+  };
+}
 
-  const investigations: MapFeature[] = demoInvestigations(now)
-    .filter((item) => bboxContains(query.bbox, item.report.latitude, item.report.longitude))
-    .map((item) => {
-      const location = approximateLocation(item.report.latitude, item.report.longitude);
-      const age = ageMinutes(item.report.observedAt, now);
-      return {
-        id: `investigation:${item.id}`,
-        kind: "investigation",
-        title: item.title,
-        latitude: location.latitude,
-        longitude: location.longitude,
-        locationPrecisionKm: location.precisionKm,
-        observedAt: item.report.observedAt,
-        ageMinutes: age,
-        freshness: freshnessOf(age),
-        reviewStatus: item.status,
-        priority: item.recommendation.priority,
-        provenance: { source: "reports", mode: item.mode, label: "Synthetic report (demo)" },
-        investigationId: item.id,
-        confidence: null,
-        frpMw: null,
-      };
-    });
+/**
+ * The public-safe map projection: investigations from the read repository
+ * (public grid locations, no reporter, text or photo) plus FIRMS thermal
+ * anomalies. Investigations come first, then the newest anomalies, up to limit.
+ */
+export async function getMapData(query: MapQuery, deps: MapDeps): Promise<MapResponse> {
+  const [investigations, firms] = await Promise.all([
+    deps.repository.listMapInvestigations(query),
+    getThermalAnomalies({ bbox: query.bbox, now: deps.now, env: deps.env, signal: deps.signal }, deps),
+  ]);
+  if (!investigations.ok) throw new MapReadError(investigations.error.message);
 
-  // Investigations first (they are what reviewers act on), then newest anomalies.
-  const all = [
-    ...investigations.sort((a, b) => b.observedAt.localeCompare(a.observedAt)),
-    ...anomalies,
-  ];
-  const features = all.slice(0, query.limit);
+  const checkedAt = firms.availability.checkedAt;
+  const anomalies = firms.detections.map((detection) => anomalyFeature(detection, checkedAt));
+  const room = Math.max(0, query.limit - investigations.data.features.length);
+  const features = [...investigations.data.features, ...anomalies.slice(0, room)];
 
   return {
-    generatedAt: now.toISOString(),
+    mode: mapModeFor(features),
+    generatedAt: new Date().toISOString(),
     bbox: query.bbox,
     limit: query.limit,
-    total: all.length,
-    truncated: all.length > features.length,
+    truncated: investigations.data.truncated || anomalies.length > room,
     features,
-    sources: {
-      firms: {
-        mode: firms.mode,
-        state: firms.sourceState,
-        product: firms.product,
-        dayRange: firms.dayRange,
-        retrievedAt: firms.retrievedAt,
-        note:
-          firms.mode === "demo"
-            ? "Synthetic thermal anomalies for the demo."
-            : `Live NASA FIRMS ${firms.product}, last ${firms.dayRange * 24} hours.`,
-        limitations: firms.limitations,
-        ...(firms.error ? { error: firms.error } : {}),
-      },
-      investigations: {
-        mode: "demo",
-        state: investigations.length ? "available" : "not_observed",
-        retrievedAt: now.toISOString(),
-        note: "Synthetic reports and investigations. Report locations are shown to about 2 km.",
-        limitations: ["Reports are unverified claims. No report on the map is a confirmed fire."],
-      },
-    },
+    sourceAvailability: [firms.availability],
   };
 }

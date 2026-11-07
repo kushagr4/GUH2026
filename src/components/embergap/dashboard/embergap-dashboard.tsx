@@ -4,19 +4,27 @@ import Link from "next/link";
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import type { MapRegion } from "@/lib/embergap/read/regions";
-import type { MapFeature, MapResponse } from "@/lib/embergap/read/types";
-import { MapLegend, ThermalMap } from "@/components/embergap/map/thermal-map";
 import {
-  FRESHNESS_LABEL,
-  PRIORITY_LABEL,
-  PRIORITY_TONE,
+  SYNTHETIC_NOW,
+  SYNTHETIC_SCENARIOS,
+  apiErrorResponseSchema,
+  mapResponseSchema,
+  type MapFeature,
+  type MapResponse,
+} from "@/lib/embergap/contracts";
+import type { MapRegion } from "@/lib/embergap/read/regions";
+import { MapLegend, ThermalMap, featureTitle } from "@/components/embergap/map/thermal-map";
+import {
   SOURCE_STATE_LABEL,
   SOURCE_STATE_TONE,
   STATUS_LABEL,
   STATUS_TONE,
-  formatAge,
+  confidenceLabel,
+  formatDuration,
   formatUtc,
+  minutesBetween,
+  priorityLabel,
+  priorityTone,
 } from "./labels";
 import { DemoDataNotice } from "./notices";
 import { ToneBadge } from "./tone-badge";
@@ -24,8 +32,23 @@ import { ToneBadge } from "./tone-badge";
 const MAP_LIMIT = 100;
 
 function bboxParam(region: MapRegion): string {
-  const { minLon, minLat, maxLon, maxLat } = region.bbox;
-  return [minLon, minLat, maxLon, maxLat].join(",");
+  const { minLongitude, minLatitude, maxLongitude, maxLatitude } = region.bbox;
+  return [minLongitude, minLatitude, maxLongitude, maxLatitude].join(",");
+}
+
+/** Synthetic runs are "as of" SYNTHETIC_NOW, so the demo reads the same at any time. */
+function referenceTime(data: MapResponse): string {
+  return data.mode === "synthetic" ? SYNTHETIC_NOW : data.generatedAt;
+}
+
+export function investigationLabel(feature: MapFeature): string {
+  const scenario = SYNTHETIC_SCENARIOS.find((item) => item.id === feature.investigation?.syntheticScenarioId);
+  if (scenario) return scenario.title;
+  return feature.investigation ? `Investigation opened ${formatUtc(feature.investigation.openedAt)}` : featureTitle(feature);
+}
+
+function label(feature: MapFeature): string {
+  return feature.kind === "investigation" ? investigationLabel(feature) : featureTitle(feature);
 }
 
 export function EmberGapDashboard({
@@ -47,9 +70,12 @@ export function EmberGapDashboard({
   const requestRef = useRef<AbortController | null>(null);
 
   const region = regions.find((item) => item.id === regionId) ?? regions[0]!;
+  const now = referenceTime(data);
   const selected = data.features.find((feature) => feature.id === selectedId) ?? null;
   const investigations = data.features.filter((feature) => feature.kind === "investigation");
   const anomalies = data.features.filter((feature) => feature.kind === "thermal_anomaly");
+  const firms = data.sourceAvailability.find((item) => item.source === "firms") ?? null;
+  const satelliteLive = anomalies.some((feature) => !feature.provenance.isSynthetic);
 
   async function selectRegion(next: MapRegion) {
     if (next.id === regionId && !error) return;
@@ -64,22 +90,27 @@ export function EmberGapDashboard({
         `/api/embergap/map?bbox=${encodeURIComponent(bboxParam(next))}&limit=${MAP_LIMIT}`,
         { signal: controller.signal, cache: "no-store" },
       );
-      const body = (await response.json().catch(() => null)) as MapResponse | { error?: string } | null;
-      if (!response.ok || !body || !("features" in body)) {
-        const message = body && "error" in body && body.error ? body.error : "The map could not be loaded.";
-        setError(response.status === 401 ? "Your session has ended. Sign in again." : message);
+      const body: unknown = await response.json().catch(() => null);
+      const parsed = mapResponseSchema.safeParse(body);
+      if (!response.ok || !parsed.success) {
+        const apiError = apiErrorResponseSchema.safeParse(body);
+        setError(
+          response.status === 401
+            ? "Your session has ended. Sign in again."
+            : apiError.success
+              ? apiError.data.error.message
+              : "The map could not be loaded.",
+        );
         return;
       }
-      setData(body);
-      setSelectedId(body.features.find((feature) => feature.kind === "investigation")?.id ?? null);
+      setData(parsed.data);
+      setSelectedId(parsed.data.features.find((feature) => feature.kind === "investigation")?.id ?? null);
     } catch (caught) {
       if ((caught as Error).name !== "AbortError") setError("Could not reach the server.");
     } finally {
       if (requestRef.current === controller) setLoading(false);
     }
   }
-
-  const { firms } = data.sources;
 
   return (
     <div className="flex flex-col gap-4">
@@ -92,7 +123,6 @@ export function EmberGapDashboard({
               variant={item.id === regionId ? "default" : "outline"}
               aria-pressed={item.id === regionId}
               onClick={() => selectRegion(item)}
-              disabled={loading && item.id === regionId}
             >
               {item.name}
             </Button>
@@ -100,25 +130,35 @@ export function EmberGapDashboard({
         </div>
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground" aria-live="polite">
           <span>Satellite:</span>
-          <ToneBadge tone={SOURCE_STATE_TONE[firms.state]} title={firms.note}>
-            {firms.mode === "demo" ? "Demo" : "Live"} · {SOURCE_STATE_LABEL[firms.state]}
-          </ToneBadge>
-          {firms.retrievedAt ? <span>checked {formatUtc(firms.retrievedAt)}</span> : null}
+          {firms ? (
+            <ToneBadge tone={SOURCE_STATE_TONE[firms.state]}>
+              {satelliteLive ? "Live" : "Demo"} · {SOURCE_STATE_LABEL[firms.state]}
+            </ToneBadge>
+          ) : (
+            <ToneBadge tone="neutral">Not checked</ToneBadge>
+          )}
+          {firms ? <span>checked {formatUtc(firms.checkedAt)}</span> : null}
           {loading ? <span>Loading…</span> : null}
         </div>
       </div>
 
-      <DemoDataNotice satelliteLive={firms.mode === "live"} />
+      <DemoDataNotice mode={data.mode} />
 
       {error ? (
-        <p role="alert" className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
+        <p
+          role="alert"
+          className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200"
+        >
           {error}
         </p>
       ) : null}
-      {firms.error ? (
-        <p role="status" className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
-          Satellite data is unavailable: {firms.error} Missing satellite data is unknown, not evidence that
-          there is no fire.
+      {firms?.state === "unavailable" ? (
+        <p
+          role="status"
+          className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200"
+        >
+          Satellite data is unavailable{firms.message ? `: ${firms.message}` : "."} Missing satellite data is unknown,
+          not evidence that there is no fire.
         </p>
       ) : null}
 
@@ -134,18 +174,18 @@ export function EmberGapDashboard({
           <MapLegend />
           {data.truncated ? (
             <p className="text-xs text-muted-foreground">
-              Showing {data.features.length} of {data.total} items. Zoom into a smaller area to see the rest.
+              Showing the first {data.features.length} items. Zoom into a smaller area to see the rest.
             </p>
           ) : null}
         </div>
 
         <div className="flex flex-col gap-4">
-          <SelectedPanel feature={selected} />
+          <SelectedPanel feature={selected} now={now} />
 
           <Card size="sm">
             <CardHeader>
               <CardTitle>Investigations ({investigations.length})</CardTitle>
-              <CardDescription>Synthetic reports waiting for human review.</CardDescription>
+              <CardDescription>Waiting for human review. Locations are approximate.</CardDescription>
             </CardHeader>
             <CardContent>
               {investigations.length === 0 ? (
@@ -156,6 +196,7 @@ export function EmberGapDashboard({
                     <FeatureRow
                       key={feature.id}
                       feature={feature}
+                      now={now}
                       selected={feature.id === selectedId}
                       onSelect={setSelectedId}
                     />
@@ -168,15 +209,13 @@ export function EmberGapDashboard({
           <Card size="sm">
             <CardHeader>
               <CardTitle>Thermal anomalies ({anomalies.length})</CardTitle>
-              <CardDescription>
-                Satellite heat detections in the last {firms.dayRange * 24} hours. Not confirmed fires.
-              </CardDescription>
+              <CardDescription>Satellite heat detections. Not confirmed fires.</CardDescription>
             </CardHeader>
             <CardContent>
               {anomalies.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
-                  None detected. That is unknown, not evidence of no fire: cloud, overpass timing and
-                  small fires all cause gaps.
+                  None found. That is unknown, not evidence of no fire: cloud, overpass timing and small fires
+                  all cause gaps.
                 </p>
               ) : (
                 <ul className="flex flex-col gap-1">
@@ -184,6 +223,7 @@ export function EmberGapDashboard({
                     <FeatureRow
                       key={feature.id}
                       feature={feature}
+                      now={now}
                       selected={feature.id === selectedId}
                       onSelect={setSelectedId}
                     />
@@ -198,12 +238,18 @@ export function EmberGapDashboard({
   );
 }
 
+function age(feature: MapFeature, now: string): string {
+  return feature.observedAt ? `${formatDuration(minutesBetween(feature.observedAt, now))} ago` : "time unknown";
+}
+
 function FeatureRow({
   feature,
+  now,
   selected,
   onSelect,
 }: {
   feature: MapFeature;
+  now: string;
   selected: boolean;
   onSelect: (id: string) => void;
 }) {
@@ -215,18 +261,18 @@ function FeatureRow({
         aria-pressed={selected}
         className={`flex w-full flex-col items-start gap-0.5 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted ${selected ? "bg-muted" : ""}`}
       >
-        <span className="font-medium">{feature.title}</span>
+        <span className="font-medium">{label(feature)}</span>
         <span className="text-xs text-muted-foreground">
-          {formatAge(feature.ageMinutes)}
-          {feature.reviewStatus ? ` · ${STATUS_LABEL[feature.reviewStatus]}` : ""}
-          {feature.confidence ? ` · ${feature.confidence} class` : ""}
+          {age(feature, now)}
+          {feature.status ? ` · ${STATUS_LABEL[feature.status]}` : ""}
+          {feature.firms ? ` · ${confidenceLabel(feature.firms.confidence)}` : ""}
         </span>
       </button>
     </li>
   );
 }
 
-function SelectedPanel({ feature }: { feature: MapFeature | null }) {
+function SelectedPanel({ feature, now }: { feature: MapFeature | null; now: string }) {
   if (!feature) {
     return (
       <Card size="sm">
@@ -237,29 +283,36 @@ function SelectedPanel({ feature }: { feature: MapFeature | null }) {
     );
   }
 
+  const precisionKm = Math.round(feature.location.precisionMeters / 100) / 10;
+
   if (feature.kind === "investigation") {
+    const summary = feature.investigation;
     return (
       <Card size="sm" aria-live="polite">
         <CardHeader>
-          <CardTitle>{feature.title}</CardTitle>
-          <CardDescription>{feature.provenance.label}</CardDescription>
+          <CardTitle>{investigationLabel(feature)}</CardTitle>
+          <CardDescription>{feature.provenance.isSynthetic ? "Synthetic demo data" : feature.provenance.provider}</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3 text-sm">
           <div className="flex flex-wrap gap-2">
-            {feature.reviewStatus ? (
-              <ToneBadge tone={STATUS_TONE[feature.reviewStatus]}>{STATUS_LABEL[feature.reviewStatus]}</ToneBadge>
-            ) : null}
-            {feature.priority ? (
-              <ToneBadge tone={PRIORITY_TONE[feature.priority]}>{PRIORITY_LABEL[feature.priority]}</ToneBadge>
-            ) : null}
+            {feature.status ? <ToneBadge tone={STATUS_TONE[feature.status]}>{STATUS_LABEL[feature.status]}</ToneBadge> : null}
+            <ToneBadge tone={priorityTone(feature.reviewPriority)}>{priorityLabel(feature.reviewPriority)}</ToneBadge>
           </div>
           <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
-            <dt className="text-muted-foreground">Observed</dt>
+            <dt className="text-muted-foreground">Latest evidence</dt>
             <dd>
-              {formatUtc(feature.observedAt)} ({formatAge(feature.ageMinutes)})
+              {formatUtc(feature.observedAt)} ({age(feature, now)})
             </dd>
             <dt className="text-muted-foreground">Location</dt>
-            <dd>Approximate, to about {feature.locationPrecisionKm} km</dd>
+            <dd>Approximate, within about {precisionKm} km</dd>
+            {summary ? (
+              <>
+                <dt className="text-muted-foreground">Reports</dt>
+                <dd>{summary.reportCount}</dd>
+                <dt className="text-muted-foreground">Sources with data</dt>
+                <dd>{summary.sources.join(", ") || "none yet"}</dd>
+              </>
+            ) : null}
           </dl>
           {feature.investigationId ? (
             <Button asChild size="sm">
@@ -271,28 +324,31 @@ function SelectedPanel({ feature }: { feature: MapFeature | null }) {
     );
   }
 
+  const firms = feature.firms;
   return (
     <Card size="sm" aria-live="polite">
       <CardHeader>
-        <CardTitle>{feature.title}</CardTitle>
-        <CardDescription>{feature.provenance.label}</CardDescription>
+        <CardTitle>{featureTitle(feature)}</CardTitle>
+        <CardDescription>
+          {feature.provenance.isSynthetic ? "Synthetic FIRMS-style detection (demo)" : `NASA FIRMS ${feature.provenance.product ?? ""}`}
+        </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3 text-sm">
         <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
           <dt className="text-muted-foreground">Observed</dt>
           <dd>
-            {formatUtc(feature.observedAt)} ({formatAge(feature.ageMinutes)}, {FRESHNESS_LABEL[feature.freshness].toLowerCase()})
+            {formatUtc(feature.observedAt)} ({age(feature, now)}, {SOURCE_STATE_LABEL[feature.freshness].toLowerCase()})
           </dd>
-          <dt className="text-muted-foreground">Detection class</dt>
-          <dd>{feature.confidence ?? "not reported"} (the sensor&apos;s own class, not a probability)</dd>
+          <dt className="text-muted-foreground">Detection confidence</dt>
+          <dd>{confidenceLabel(firms?.confidence ?? null)}. The sensor&apos;s own rating, not a probability of fire</dd>
           <dt className="text-muted-foreground">Fire radiative power</dt>
-          <dd>{feature.frpMw === null ? "not reported" : `${feature.frpMw} MW`}</dd>
+          <dd>{firms?.frpMegawatts == null ? "not reported" : `${firms.frpMegawatts} MW`}</dd>
           <dt className="text-muted-foreground">Pixel</dt>
-          <dd>About {feature.locationPrecisionKm} km across</dd>
+          <dd>Within about {precisionKm} km</dd>
         </dl>
         <p className="text-xs text-muted-foreground">
-          A thermal anomaly is a satellite observation of heat, not a confirmed fire. Industrial sites,
-          sun glint and hot surfaces can also trigger detections.
+          A thermal anomaly is a satellite observation of heat, not a confirmed fire. Industrial sites, sun glint and
+          hot surfaces can also trigger detections.
         </p>
       </CardContent>
     </Card>

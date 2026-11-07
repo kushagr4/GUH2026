@@ -1,42 +1,44 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { getInvestigationForUser } from "@/lib/embergap/read/investigations";
+import { investigationDetailResponseSchema } from "@/lib/embergap/contracts";
+import { apiError, NO_STORE } from "@/lib/embergap/read/api-errors";
+import { getInvestigationDetail } from "@/lib/embergap/read/investigations";
+import { getReadRepository } from "@/lib/embergap/read/repository";
 import { createRateLimiter } from "@/lib/rate-limit";
 import { getCurrentUser } from "@/lib/supabase/auth";
 
 const limiter = createRateLimiter({ limit: 60, windowMs: 60_000 });
 
-const NO_STORE = { "Cache-Control": "private, no-store" };
-
-function errorResponse(status: number, error: string, headers?: HeadersInit) {
-  return NextResponse.json({ error }, { status, headers: { ...NO_STORE, ...headers } });
-}
-
 /**
  * GET /api/embergap/investigations/[id]
- * The investigation, its source-attributed findings, gaps and activity, if the
- * caller may see it. Anything else is 404, so ids can't be probed.
+ * investigationDetailResponseSchema for an investigation the caller may see.
+ * Anything else is 404, so IDs can't be probed.
  */
 export async function GET(
   _request: NextRequest,
   ctx: RouteContext<"/api/embergap/investigations/[id]">,
 ) {
   const user = await getCurrentUser();
-  if (!user) return errorResponse(401, "Please sign in.");
+  if (!user) return apiError(401, "unauthorized", "Please sign in.");
 
   const { allowed, retryAfterSeconds } = limiter.check(user.id);
   if (!allowed) {
-    return errorResponse(429, "Too many requests. Please wait a moment.", {
-      "Retry-After": String(retryAfterSeconds),
-    });
+    return apiError(429, "rate_limited", "Too many requests. Please wait a moment.", { retryAfterSeconds });
   }
 
   const { id } = await ctx.params;
   try {
-    const investigation = await getInvestigationForUser(id, user);
-    if (!investigation) return errorResponse(404, "Investigation not found.");
-    return NextResponse.json(investigation, { headers: NO_STORE });
+    const lookup = await getInvestigationDetail(id, await getReadRepository());
+    if (lookup.kind === "not_found") return apiError(404, "not_found", "Investigation not found.");
+    if (lookup.kind === "error") return apiError(503, "unavailable", "The investigation is unavailable. Try again shortly.");
+
+    const checked = investigationDetailResponseSchema.safeParse(lookup.data);
+    if (!checked.success) {
+      console.error("[embergap] investigation response broke the contract", checked.error.issues.slice(0, 5));
+      return apiError(500, "internal", "The investigation could not be loaded.");
+    }
+    return NextResponse.json(checked.data, { headers: NO_STORE });
   } catch (error) {
     console.error("[embergap] investigation read failed", error);
-    return errorResponse(500, "The investigation could not be loaded.");
+    return apiError(503, "unavailable", "The investigation is unavailable. Try again shortly.");
   }
 }

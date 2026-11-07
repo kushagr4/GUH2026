@@ -1,12 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { SYNTHETIC_NOW, firmsEvidenceSchema, idSchema, sourceAvailabilitySchema } from "@/lib/embergap/contracts";
 import { IntegrationError } from "@/lib/integrations/errors";
-import { parseBbox } from "@/lib/embergap/sources/firms/bbox";
+import { bboxContains, formatBbox, isWithinFirmsSpan } from "@/lib/embergap/sources/firms/bbox";
 import { createFirmsClient, fetchFirmsCsv, getFirmsMode } from "@/lib/embergap/sources/firms/client";
+import { demoFirmsDetections } from "@/lib/embergap/sources/firms/fixtures";
 import { clearFirmsCache, getThermalAnomalies } from "@/lib/embergap/sources/firms";
 import { FirmsFormatError, parseFirmsCsv, toConfidence, toObservedAt } from "@/lib/embergap/sources/firms/parse";
 
 const NOW = new Date("2026-11-07T14:00:00Z");
-const BBOX = { minLon: -2.15, minLat: 53.25, maxLon: -1.55, maxLat: 53.6 };
+const BBOX = { minLongitude: -2.15, minLatitude: 53.25, maxLongitude: -1.55, maxLatitude: 53.6 };
 const KEY = "abcdef0123456789abcdef0123456789";
 const LIVE_ENV = { EMBERGAP_FIRMS_MODE: "live", NASA_FIRMS_MAP_KEY: KEY };
 
@@ -27,28 +29,44 @@ const MODIS_CSV = [
 ].join("\r\n");
 
 describe("parseFirmsCsv", () => {
-  it("parses VIIRS rows by header name, deduplicates and skips bad rows", () => {
+  it("parses VIIRS rows into contract FIRMS evidence, deduplicating and skipping bad rows", () => {
     const detections = parseFirmsCsv(VIIRS_CSV, { product: "VIIRS_SNPP_NRT", retrievedAt: NOW.toISOString() });
     expect(detections).toHaveLength(2);
-    expect(detections[0]).toMatchObject({
+    const [first] = detections;
+    expect(first).toMatchObject({
       latitude: 53.4561,
       longitude: -1.8724,
       observedAt: "2026-11-07T13:12:00.000Z",
-      confidence: "high",
-      confidenceRaw: "h",
-      frpMw: 6.4,
-      brightnessK: 338.2,
-      dayNight: "day",
-      synthetic: false,
+      isSynthetic: false,
     });
+    expect(first?.evidence).toMatchObject({
+      confidence: "high",
+      frpMegawatts: 6.4,
+      brightnessKelvin: 338.2,
+      dayNight: "day",
+      version: "2.0NRT",
+      scanKm: 0.39,
+      trackKm: 0.36,
+    });
+    for (const detection of detections) {
+      expect(firmsEvidenceSchema.safeParse(detection.evidence).success).toBe(true);
+      expect(idSchema.safeParse(detection.id).success).toBe(true);
+    }
   });
 
-  it("parses MODIS numeric confidence and short acq_time values", () => {
+  it("gives the same row the same stable id on every fetch", () => {
+    const a = parseFirmsCsv(VIIRS_CSV, { product: "VIIRS_SNPP_NRT", retrievedAt: NOW.toISOString() });
+    const b = parseFirmsCsv(VIIRS_CSV, { product: "VIIRS_SNPP_NRT", retrievedAt: "2026-11-07T15:00:00.000Z" });
+    expect(a.map((d) => d.id)).toEqual(b.map((d) => d.id));
+    expect(a[0]?.id.startsWith("00000000-")).toBe(false);
+  });
+
+  it("keeps MODIS confidence as its 0-100 number and handles short acq_time values", () => {
     const [detection] = parseFirmsCsv(MODIS_CSV, { product: "MODIS_NRT", retrievedAt: NOW.toISOString() });
     expect(detection?.observedAt).toBe("2026-11-07T00:54:00.000Z");
-    expect(detection?.confidence).toBe("nominal");
-    expect(detection?.brightnessK).toBe(322.5);
-    expect(detection?.dayNight).toBe("night");
+    expect(detection?.evidence.confidence).toBe(62);
+    expect(detection?.evidence.brightnessKelvin).toBe(322.5);
+    expect(detection?.evidence.dayNight).toBe("night");
   });
 
   it("treats a header-only CSV as no detections", () => {
@@ -62,11 +80,10 @@ describe("parseFirmsCsv", () => {
     ).toThrow(FirmsFormatError);
   });
 
-  it("maps confidence classes without inventing probabilities", () => {
+  it("maps confidence without inventing probabilities", () => {
     expect(toConfidence("l")).toBe("low");
-    expect(toConfidence("29")).toBe("low");
-    expect(toConfidence("30")).toBe("nominal");
-    expect(toConfidence("80")).toBe("high");
+    expect(toConfidence("n")).toBe("nominal");
+    expect(toConfidence("80")).toBe(80);
     expect(toConfidence("101")).toBeNull();
     expect(toConfidence("")).toBeNull();
     expect(toObservedAt("2026-11-07", "7")).toBe("2026-11-07T00:07:00.000Z");
@@ -74,21 +91,14 @@ describe("parseFirmsCsv", () => {
   });
 });
 
-describe("parseBbox", () => {
-  it("accepts minLon,minLat,maxLon,maxLat", () => {
-    expect(parseBbox("-2.15,53.25,-1.55,53.6")).toEqual({ ok: true, bbox: BBOX });
-  });
-
-  it.each([
-    ["missing", null],
-    ["three numbers", "1,2,3"],
-    ["text", "a,b,c,d"],
-    ["inverted", "-1.55,53.25,-2.15,53.6"],
-    ["off the globe", "-190,10,-170,20"],
-    ["too large", "-60,10,0,20"],
-    ["exponent notation", "1e1,2,3,4"],
-  ])("refuses %s", (_label, raw) => {
-    expect(parseBbox(raw).ok).toBe(false);
+describe("bbox helpers", () => {
+  it("formats west,south,east,north and checks containment and span", () => {
+    expect(formatBbox(BBOX)).toBe("-2.15,53.25,-1.55,53.6");
+    expect(bboxContains(BBOX, 53.4, -1.9)).toBe(true);
+    expect(bboxContains(BBOX, 54, -1.9)).toBe(false);
+    expect(bboxContains(null, 0, 0)).toBe(true);
+    expect(isWithinFirmsSpan(BBOX)).toBe(true);
+    expect(isWithinFirmsSpan({ minLongitude: -60, minLatitude: 0, maxLongitude: 0, maxLatitude: 10 })).toBe(false);
   });
 });
 
@@ -96,40 +106,51 @@ describe("getThermalAnomalies", () => {
   beforeEach(() => clearFirmsCache());
   afterEach(() => vi.restoreAllMocks());
 
-  it("is demo mode by default, with labelled synthetic detections inside the box", async () => {
+  it("is demo mode by default: synthetic fixtures checked as of SYNTHETIC_NOW", async () => {
     const fetchCsv = vi.fn();
     const result = await getThermalAnomalies({ bbox: BBOX, now: NOW, env: {} }, { fetchCsv });
     expect(getFirmsMode({})).toBe("demo");
     expect(fetchCsv).not.toHaveBeenCalled();
-    expect(result.mode).toBe("demo");
-    expect(result.sourceState).toBe("available");
     expect(result.detections.length).toBeGreaterThan(0);
-    expect(result.detections.every((d) => d.synthetic)).toBe(true);
-    expect(result.limitations.join(" ")).toMatch(/synthetic/i);
-    // The 5-hour-old night detection is inside a 1-day range; Sierra ones are outside the box.
-    expect(result.detections.every((d) => d.longitude > -3 && d.longitude < -1)).toBe(true);
+    expect(result.detections.every((d) => d.isSynthetic && d.id.startsWith("00000000-"))).toBe(true);
+    expect(sourceAvailabilitySchema.parse(result.availability)).toMatchObject({
+      source: "firms",
+      state: "available",
+      checkedAt: SYNTHETIC_NOW,
+    });
   });
 
-  it("reports an empty area as not_observed, never as a negative result", async () => {
-    const empty = { minLon: 10, minLat: 10, maxLon: 11, maxLat: 11 };
-    const result = await getThermalAnomalies({ bbox: empty, now: NOW, env: {} });
-    expect(result.sourceState).toBe("not_observed");
-    expect(result.limitations.join(" ")).toMatch(/does not mean no fire/);
+  it("every fixture is valid FIRMS evidence observed before SYNTHETIC_NOW", () => {
+    for (const detection of demoFirmsDetections()) {
+      expect(firmsEvidenceSchema.safeParse(detection.evidence).success).toBe(true);
+      expect(Date.parse(detection.observedAt)).toBeLessThan(Date.parse(SYNTHETIC_NOW));
+    }
+  });
+
+  it("reports an empty area as not_observed with the window checked, never as negative", async () => {
+    const empty = { minLongitude: 10, minLatitude: 10, maxLongitude: 11, maxLatitude: 11 };
+    const result = await getThermalAnomalies({ bbox: empty, env: {} });
+    const availability = sourceAvailabilitySchema.parse(result.availability);
+    expect(availability.state).toBe("not_observed");
+    expect(availability.windowStart).not.toBeNull();
+    expect(availability.windowEnd).toBe(SYNTHETIC_NOW);
+    expect(availability.message).toMatch(/not evidence of no fire/);
   });
 
   it("is unavailable, not fixtures, when live mode has no key", async () => {
     const result = await getThermalAnomalies({ bbox: BBOX, now: NOW, env: { EMBERGAP_FIRMS_MODE: "live" } });
-    expect(result).toMatchObject({ mode: "live", sourceState: "unavailable", detections: [] });
-    expect(result.error).toMatch(/not set up/);
+    expect(result.detections).toEqual([]);
+    expect(sourceAvailabilitySchema.parse(result.availability)).toMatchObject({ state: "unavailable" });
+    expect(result.availability.message).toMatch(/not set up/);
   });
 
-  it("parses a live response and caches it", async () => {
+  it("parses a live response, caches it, and reports availability", async () => {
     const fetchCsv = vi.fn().mockResolvedValue(VIIRS_CSV);
     const first = await getThermalAnomalies({ bbox: BBOX, now: NOW, env: LIVE_ENV }, { fetchCsv });
     const second = await getThermalAnomalies({ bbox: BBOX, now: NOW, env: LIVE_ENV }, { fetchCsv });
-    expect(first.mode).toBe("live");
-    expect(first.sourceState).toBe("available");
     expect(first.detections).toHaveLength(2);
+    expect(first.detections.every((d) => !d.isSynthetic)).toBe(true);
+    expect(sourceAvailabilitySchema.parse(first.availability).state).toBe("available");
     expect(second).toBe(first);
     expect(fetchCsv).toHaveBeenCalledTimes(1);
     expect(fetchCsv.mock.calls[0]?.[0]).toMatchObject({ product: "VIIRS_SNPP_NRT", dayRange: 1, bbox: BBOX });
@@ -138,16 +159,16 @@ describe("getThermalAnomalies", () => {
   it("turns a live failure into an honest unavailable state", async () => {
     const fetchCsv = vi.fn().mockRejectedValue(new IntegrationError("NASA FIRMS", "timeout", "NASA FIRMS: timed out"));
     const result = await getThermalAnomalies({ bbox: BBOX, now: NOW, env: LIVE_ENV }, { fetchCsv });
-    expect(result).toMatchObject({ sourceState: "unavailable", detections: [] });
-    expect(result.error).toBe("NASA FIRMS took too long to respond.");
+    expect(result.detections).toEqual([]);
+    expect(result.availability).toMatchObject({ state: "unavailable", message: "NASA FIRMS took too long to respond." });
   });
 
   it("treats a non-CSV live body (for example a bad key) as unavailable", async () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     const fetchCsv = vi.fn().mockResolvedValue("Invalid MAP_KEY.");
     const result = await getThermalAnomalies({ bbox: BBOX, now: NOW, env: LIVE_ENV }, { fetchCsv });
-    expect(result.sourceState).toBe("unavailable");
-    expect(result.error).toMatch(/unexpected/);
+    expect(result.availability.state).toBe("unavailable");
+    expect(result.availability.message).toMatch(/unexpected/);
   });
 });
 
@@ -163,8 +184,7 @@ describe("FIRMS client", () => {
       (caught: unknown) => caught,
     );
 
-    const url = String(fetchImpl.mock.calls[0]?.[0]);
-    expect(url).toBe(
+    expect(String(fetchImpl.mock.calls[0]?.[0])).toBe(
       `https://firms.modaps.eosdis.nasa.gov/api/area/csv/${KEY}/VIIRS_SNPP_NRT/-2.15,53.25,-1.55,53.6/1`,
     );
     expect(error).toBeInstanceOf(IntegrationError);

@@ -1,21 +1,18 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { InvestigationView } from "@/components/embergap/dashboard/investigation-view";
-import { getInvestigationForUser } from "@/lib/embergap/read/investigations";
+import { getInvestigationDetail } from "@/lib/embergap/read/investigations";
+import { getReadRepository } from "@/lib/embergap/read/repository";
 import { requireUser } from "@/lib/supabase/auth";
 
 export const metadata: Metadata = { title: "Investigation" };
 
-export default async function InvestigationPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const user = await requireUser();
+export default async function InvestigationPage({ params }: { params: Promise<{ id: string }> }) {
+  await requireUser();
   const { id } = await params;
-  const now = new Date();
-  const investigation = await getInvestigationForUser(id, user, now);
-  if (!investigation) notFound();
+  const lookup = await getInvestigationDetail(id, await getReadRepository());
+  if (lookup.kind === "not_found") notFound();
+  if (lookup.kind === "error") throw new Error("The investigation is unavailable. Try again shortly.");
 
-  return <InvestigationView investigation={investigation} now={now} />;
+  return <InvestigationView detail={lookup.data} />;
 }
