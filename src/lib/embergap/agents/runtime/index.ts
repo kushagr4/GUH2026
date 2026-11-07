@@ -50,8 +50,8 @@ export { RUNTIME_SCHEMA_VERSION, eventIdFor, findingIdFor } from "./types";
 export type { RuntimeEvent, TaskOutcome } from "./types";
 export { DEMO_AGENT_IDS, FIRE_WEATHER_HEURISTICS, createDemoAgents } from "./scenarios/demo-agents";
 export type { DemoAgentId, DemoAgentOptions } from "./scenarios/demo-agents";
-export { DEMO_LINK, DEMO_PARTITION, DEMO_PHASES, demoActions, runPartitionDemo } from "./scenarios/partition-demo";
-export type { DemoCheck, PartitionDemoOptions, PartitionDemoResult, PhaseSummary } from "./scenarios/partition-demo";
+export { DEMO_LINK, DEMO_PARTITION, DEMO_PHASES, demoActions, demoStages, runPartitionDemo } from "./scenarios/partition-demo";
+export type { DemoCheck, DemoStage, PartitionDemoOptions, PartitionDemoResult, PhaseSummary } from "./scenarios/partition-demo";
 // Investigations: prepared canonical inputs in, findings and recommendations out.
 export {
   eonetObservationsProcessor,

@@ -221,3 +221,20 @@ describe("source adapters through the shared port", () => {
     expect(bad.availability.state).toBe("unavailable");
   });
 });
+
+describe("the demo's stages", () => {
+  it("tells the story in order, from the run's own state", async () => {
+    const result = await runPartitionDemo();
+    expect(result.stages.map((stage) => stage.stage)).toEqual(["connected", "partitioned", "working_in_isolation", "reconnected", "reconciled"]);
+    const times = result.stages.map((stage) => stage.atMs);
+    expect([...times].sort((a, b) => a - b)).toEqual(times);
+    expect(result.stages[2].detail).toMatch(/distinct histories/);
+    expect(result.stages[4].atMs).toBe(result.convergence.settledAtMs);
+    expect(result.stages[4].detail).toContain(`${result.reconciliation!.redelivered} event(s) caught up`);
+  });
+
+  it("only lists the stages a partial replay reached", async () => {
+    const midway = await runPartitionDemo({ stopAtMs: 8_000 });
+    expect(midway.stages.map((stage) => stage.stage)).toEqual(["connected"]);
+  });
+});
