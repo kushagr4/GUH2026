@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { apiError, apiErrorFromDb, apiJson, readBodyText } from "@/features/embergap/api";
 import { scheduleInvestigation } from "@/features/embergap/orchestrator";
+import { MISSING_SCHEMA_CODES } from "@/features/embergap/status";
 import { submitReport } from "@/features/embergap/submit";
 import { reportSubmissionRequestSchema, reportSubmissionResponseSchema } from "@/lib/embergap/contracts";
 import { createRateLimiter } from "@/lib/rate-limit";
@@ -62,6 +63,11 @@ export async function POST(request: Request) {
   const result = await submitReport(await createClient(), user.id, parsed.data);
   if (!result.ok) {
     if (result.reason === "media_invalid") return apiError(400, "media_invalid", result.message);
+    if (MISSING_SCHEMA_CODES.has(result.error.code ?? "")) {
+      // The hosted project doesn't have the EmberGap tables yet: say so plainly.
+      console.error("embergap: report submission failed: the EmberGap migrations are not applied to this Supabase project (npm run db:push)", { code: result.error.code });
+      return apiError(503, "unavailable", "Reports can't be saved yet: the database is still being set up. Please try again later.");
+    }
     if (result.error.kind === "unknown" || result.error.kind === "unavailable") {
       console.error("embergap: report submission failed", { kind: result.error.kind, code: result.error.code });
     }

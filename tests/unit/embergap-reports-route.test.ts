@@ -148,6 +148,17 @@ describe("POST /api/embergap/reports", () => {
     expect(text).not.toMatch(/XX000|violates|constraint|relation/i);
   });
 
+  it("says plainly when the hosted database has no EmberGap tables yet, instead of a generic 500", async () => {
+    submitReport.mockResolvedValue({ ok: false, error: { kind: "unknown", message: "Something went wrong.", code: "PGRST205" } });
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const response = await post(goodBody());
+    expect(response.status).toBe(503);
+    expect((await errorOf(response)).code).toBe("unavailable");
+    expect(String(error.mock.calls[0]?.[0])).toMatch(/migrations are not applied/);
+    expect(scheduleInvestigation).not.toHaveBeenCalled();
+    error.mockRestore();
+  });
+
   it("rate-limits a reporter after five reports a minute", async () => {
     for (let i = 0; i < 5; i++) expect((await post(goodBody())).status).toBe(201);
     const response = await post(goodBody());
