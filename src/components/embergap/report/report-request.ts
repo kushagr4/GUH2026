@@ -1,5 +1,6 @@
 import {
   LOCATION_UNCERTAINTY_METERS,
+  REPORT_MAX_AGE_HOURS,
   apiErrorResponseSchema,
   reportSubmissionRequestSchema,
   type ReportMediaUpload,
@@ -55,13 +56,58 @@ export function localDateTimeToUtcIso(value: string): string | null {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
-function parseCoordinate(raw: string, min: number, max: number, name: string): { value?: number; error?: string } {
+/**
+ * Where the demo accepts reports. Configurable; the server does not enforce it.
+ * Edges are inclusive.
+ */
+export const SERVICE_AREA = {
+  name: "Italy",
+  minLatitude: 35.4,
+  maxLatitude: 47.1,
+  minLongitude: 6.6,
+  maxLongitude: 18.6,
+  example: { latitude: 40.81, longitude: 14.5, label: "Terzigno vineyards, Vesuvius" },
+} as const;
+export const SERVICE_AREA_MESSAGE = `EmberGap's demo currently covers ${SERVICE_AREA.name}. Enter a location in ${SERVICE_AREA.name}, for example ${SERVICE_AREA.example.latitude}, ${SERVICE_AREA.example.longitude} (${SERVICE_AREA.example.label}).`;
+
+/** Same limit the server enforces (contract REPORT_MAX_AGE_HOURS), so the form never accepts what the API rejects. */
+export const REPORT_MAX_AGE_MS = REPORT_MAX_AGE_HOURS * 3_600_000;
+export const REPORT_MIN_DESCRIPTION_CHARS = 10;
+/** The description counter turns to a warning at this share of the maximum. */
+export const DESCRIPTION_WARNING_RATIO = 0.9;
+
+export const MESSAGES = {
+  description: "Add a few words about what you saw, e.g. smoke colour, size and direction (towards the vineyard, the road…).",
+  observedAtMissing: "Enter when you saw it.",
+  observedAtFuture: "That time is in the future.",
+  observedAtTooOld: `Reports must be about something seen in the last ${REPORT_MAX_AGE_HOURS} hours.`,
+  uncertainty: "Choose one of the listed distances.",
+} as const;
+
+/** The fields that validate inline, in the order the form shows them. */
+export const VALIDATED_FIELDS = ["latitude", "longitude", "location", "uncertaintyMeters", "observedAt", "description"] as const;
+export type ValidatedField = (typeof VALIDATED_FIELDS)[number];
+
+const EXAMPLES = { latitude: SERVICE_AREA.example.latitude, longitude: SERVICE_AREA.example.longitude } as const;
+
+/** Accepts "43.47" or "43,47" (Italian decimal comma); rejects more than one separator. */
+export function parseCoordinate(raw: string, min: number, max: number, name: "latitude" | "longitude"): { value?: number; error?: string } {
   const trimmed = raw.trim();
-  if (trimmed === "") return { error: `Enter a ${name}, or find a postcode above.` };
-  const value = Number(trimmed);
-  if (!Number.isFinite(value)) return { error: `Enter the ${name} as a number, e.g. ${name === "latitude" ? "53.48" : "-2.24"}.` };
+  if (trimmed === "") return { error: `Enter a ${name}, or use your approximate location.` };
+  if ((trimmed.match(/[.,]/g) ?? []).length > 1) {
+    return { error: `Use a single decimal separator, e.g. ${EXAMPLES[name]}.` };
+  }
+  const normalised = trimmed.replace(",", ".");
+  const value = /^[+-]?(\d+\.?\d*|\.\d+)$/.test(normalised) ? Number(normalised) : Number.NaN;
+  if (!Number.isFinite(value)) return { error: `Enter the ${name} as a number, e.g. ${EXAMPLES[name]}.` };
   if (value < min || value > max) return { error: `The ${name} must be between ${min} and ${max}.` };
   return { value: roundTo(value, COORDINATE_DECIMALS) };
+}
+
+export function isInServiceArea(latitude: number | undefined, longitude: number | undefined): boolean {
+  const latOk = latitude === undefined || (latitude >= SERVICE_AREA.minLatitude && latitude <= SERVICE_AREA.maxLatitude);
+  const lonOk = longitude === undefined || (longitude >= SERVICE_AREA.minLongitude && longitude <= SERVICE_AREA.maxLongitude);
+  return latOk && lonOk;
 }
 
 function issueField(path: readonly PropertyKey[]): ReportField {
@@ -74,30 +120,36 @@ function issueField(path: readonly PropertyKey[]): ReportField {
   return "form";
 }
 
-export type BuildResult = { ok: true; data: ReportSubmissionRequest } | { ok: false; fieldErrors: ReportFieldErrors };
+// Any valid UUID; only used to validate values before real ids exist.
+const PLACEHOLDER_ID = "00000000-0000-4000-8000-000000000000";
 
-/**
- * Turns form values into a schema-valid request body, or per-field messages.
- * `now` is injectable for tests; observed times later than it are rejected
- * (stricter than the server's five-minute grace).
- */
-export function buildReportRequest(
-  values: ReportFormValues,
-  ids: { clientRequestId: string; media: ReportMediaUpload | null },
-  now: Date = new Date(),
-): BuildResult {
+function evaluate(values: ReportFormValues, ids: { clientRequestId: string; media: ReportMediaUpload | null }, now: Date) {
   const fieldErrors: ReportFieldErrors = {};
 
   const latitude = parseCoordinate(values.latitude, -90, 90, "latitude");
   const longitude = parseCoordinate(values.longitude, -180, 180, "longitude");
   if (latitude.error) fieldErrors.latitude = latitude.error;
   if (longitude.error) fieldErrors.longitude = longitude.error;
+  // A valid coordinate on either axis outside the area is already a location problem.
+  if ((latitude.value !== undefined || longitude.value !== undefined) && !isInServiceArea(latitude.value, longitude.value)) {
+    fieldErrors.location = SERVICE_AREA_MESSAGE;
+  }
+
+  if (!UNCERTAINTY_OPTIONS.some((option) => option.value === values.uncertaintyMeters)) {
+    fieldErrors.uncertaintyMeters = MESSAGES.uncertainty;
+  }
 
   const observedAt = localDateTimeToUtcIso(values.observedAtLocal);
-  if (!observedAt) fieldErrors.observedAt = "Enter when you saw it.";
-  else if (Date.parse(observedAt) > now.getTime()) fieldErrors.observedAt = "That time is in the future.";
+  if (!observedAt) fieldErrors.observedAt = MESSAGES.observedAtMissing;
+  else if (Date.parse(observedAt) > now.getTime()) fieldErrors.observedAt = MESSAGES.observedAtFuture;
+  else if (Date.parse(observedAt) < now.getTime() - REPORT_MAX_AGE_MS) fieldErrors.observedAt = MESSAGES.observedAtTooOld;
 
-  const candidate = {
+  const description = values.description.trim();
+  // Whitespace-only counts as empty; spaces don't count towards the minimum.
+  if (description.replace(/\s/g, "").length < REPORT_MIN_DESCRIPTION_CHARS) fieldErrors.description = MESSAGES.description;
+
+  // The contract's own rules (72 h age, maximum length, control characters) fill any gaps.
+  const parsed = reportSubmissionRequestSchema.safeParse({
     clientRequestId: ids.clientRequestId,
     observedAt: observedAt ?? "",
     location: {
@@ -105,16 +157,37 @@ export function buildReportRequest(
       longitude: longitude.value ?? Number.NaN,
       uncertaintyMeters: values.uncertaintyMeters,
     },
-    description: values.description,
+    description,
     media: ids.media,
-  };
-  const parsed = reportSubmissionRequestSchema.safeParse(candidate);
+  });
   if (!parsed.success) {
-    for (const issue of parsed.error.issues) {
-      const field = issueField(issue.path);
-      fieldErrors[field] ??= issue.message;
-    }
+    for (const issue of parsed.error.issues) fieldErrors[issueField(issue.path)] ??= issue.message;
   }
+  return { fieldErrors, parsed };
+}
+
+/** Every client-side problem with the current values, keyed by field. */
+export function collectFieldErrors(values: ReportFormValues, now: Date = new Date()): ReportFieldErrors {
+  return evaluate(values, { clientRequestId: PLACEHOLDER_ID, media: null }, now).fieldErrors;
+}
+
+/**
+ * The inline message for one field. It is the same rule set as
+ * buildReportRequest, so inline and submit-time messages cannot disagree.
+ */
+export function validateReportField(field: ValidatedField, values: ReportFormValues, now: Date = new Date()): string | undefined {
+  return collectFieldErrors(values, now)[field];
+}
+
+export type BuildResult = { ok: true; data: ReportSubmissionRequest } | { ok: false; fieldErrors: ReportFieldErrors };
+
+/** Turns form values into a schema-valid request body, or per-field messages. */
+export function buildReportRequest(
+  values: ReportFormValues,
+  ids: { clientRequestId: string; media: ReportMediaUpload | null },
+  now: Date = new Date(),
+): BuildResult {
+  const { fieldErrors, parsed } = evaluate(values, ids, now);
   if (Object.keys(fieldErrors).length > 0 || !parsed.success) return { ok: false, fieldErrors };
   return { ok: true, data: parsed.data };
 }

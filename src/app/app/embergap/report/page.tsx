@@ -21,7 +21,7 @@ export default async function ReportPage() {
         role="alert"
         className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900 dark:border-red-900 dark:bg-red-950 dark:text-red-100"
       >
-        <p className="font-semibold">If anyone is in immediate danger, call 999 (UK) / 112 now.</p>
+        <p className="font-semibold">If anyone is in immediate danger, call 112 now (EU emergency number). In Italy you can also call 115 (Vigili del Fuoco).</p>
         <p className="mt-1">
           This app does not contact emergency services. Report only from a safe place; never approach a fire to take a
           photo.

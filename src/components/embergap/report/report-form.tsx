@@ -15,18 +15,22 @@ import {
 } from "@/lib/embergap/contracts";
 import { createClient } from "@/lib/supabase/client";
 import { reencodePhoto } from "./photo";
-import { lookupPostcode, suggestedUncertaintyMeters } from "./postcode";
 import {
-  COORDINATE_DECIMALS,
   DEFAULT_UNCERTAINTY_METERS,
+  DESCRIPTION_WARNING_RATIO,
   GEOLOCATION_DECIMALS,
   UNCERTAINTY_OPTIONS,
+  SERVICE_AREA,
+  VALIDATED_FIELDS,
   buildReportRequest,
   mapApiError,
   roundTo,
   toDateTimeLocalValue,
+  validateReportField,
   type ReportField,
   type ReportFieldErrors,
+  type ReportFormValues,
+  type ValidatedField,
 } from "./report-request";
 
 /** Ids for one submission, kept across retries until a 2xx response. */
@@ -34,6 +38,19 @@ type Submission = { clientRequestId: string; mediaId: string | null; uploaded: b
 
 const fieldId = (name: ReportField) => `report-${name}`;
 const errorId = (name: ReportField) => `report-${name}-error`;
+
+/** Order the error summary and focus follow; "location" problems are fixed in the latitude box. */
+const FOCUS_ORDER: ReportField[] = ["latitude", "longitude", "location", "uncertaintyMeters", "observedAt", "description", "media"];
+const focusTarget = (name: ReportField): string => fieldId(name === "location" ? "latitude" : name);
+
+/** Fields whose inline message depends on each input (coordinates also drive the service-area check). */
+const AFFECTS: Record<"latitude" | "longitude" | "uncertaintyMeters" | "observedAt" | "description", ValidatedField[]> = {
+  latitude: ["latitude", "location"],
+  longitude: ["longitude", "location"],
+  uncertaintyMeters: ["uncertaintyMeters"],
+  observedAt: ["observedAt"],
+  description: ["description"],
+};
 
 function FieldError({ name, errors }: { name: ReportField; errors: ReportFieldErrors }) {
   const message = errors[name];
@@ -61,8 +78,8 @@ export function ReportForm({ userId }: { userId: string }) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [locating, setLocating] = useState(false);
-  const [postcode, setPostcode] = useState("");
-  const [findingPostcode, setFindingPostcode] = useState(false);
+  const [touched, setTouched] = useState<Partial<Record<ValidatedField, boolean>>>({});
+  const [triedToSend, setTriedToSend] = useState(false);
   const [locationNote, setLocationNote] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<ReportFieldErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
@@ -79,6 +96,32 @@ export function ReportForm({ userId }: { userId: string }) {
 
   function describedBy(name: ReportField, hint?: string) {
     return [hint, fieldErrors[name] ? errorId(name) : undefined].filter(Boolean).join(" ") || undefined;
+  }
+
+  const currentValues = (): ReportFormValues => ({ latitude, longitude, uncertaintyMeters, observedAtLocal, description });
+
+  /** Re-checks the given fields against `values`; only fields already touched (or showing an error) change. */
+  function refresh(fields: ValidatedField[], values: ReportFormValues, force = false) {
+    setFieldErrors((prev) => {
+      const next = { ...prev };
+      for (const field of fields) {
+        if (!force && !touched[field] && !prev[field]) continue;
+        next[field] = validateReportField(field, values);
+      }
+      return next;
+    });
+  }
+
+  /** Validate on blur: the field (and anything it drives) becomes "touched". */
+  function handleBlur(input: keyof typeof AFFECTS) {
+    const fields = AFFECTS[input];
+    setTouched((prev) => ({ ...prev, ...Object.fromEntries(fields.map((field) => [field, true])) }));
+    refresh(fields, currentValues(), true);
+  }
+
+  /** After the first error, re-validate as the user types so the message clears as soon as it's fixed. */
+  function handleChange(input: keyof typeof AFFECTS, patch: Partial<ReportFormValues>) {
+    refresh(AFFECTS[input], { ...currentValues(), ...patch });
   }
 
   function handleUseLocation() {
@@ -105,27 +148,6 @@ export function ReportForm({ userId }: { userId: string }) {
         setLocating(false);
       },
       { enableHighAccuracy: false, timeout: 10_000, maximumAge: 60_000 },
-    );
-  }
-
-  async function handleFindPostcode() {
-    if (findingPostcode) return;
-    setLocationNote(null);
-    setFindingPostcode(true);
-    const result = await lookupPostcode(postcode);
-    setFindingPostcode(false);
-    if (!result.ok) {
-      setLocationNote(result.message);
-      return;
-    }
-    setLatitude(String(roundTo(result.latitude, COORDINATE_DECIMALS)));
-    setLongitude(String(roundTo(result.longitude, COORDINATE_DECIMALS)));
-    setUncertaintyMeters((current) => Math.max(current, suggestedUncertaintyMeters(result.kind)));
-    setFieldErrors((prev) => ({ ...prev, latitude: undefined, longitude: undefined, location: undefined }));
-    setLocationNote(
-      result.kind === "outcode"
-        ? `Using the centre of the ${result.display} area, so the radius is at least 5 km. Narrow it if you can.`
-        : `Using the centre of ${result.display}. Adjust the radius below if the smoke was further away.`,
     );
   }
 
@@ -179,7 +201,11 @@ export function ReportForm({ userId }: { userId: string }) {
     );
     if (!built.ok) {
       setFieldErrors(built.fieldErrors);
-      setFormError("Some fields need attention.");
+      setTouched(Object.fromEntries(VALIDATED_FIELDS.map((field) => [field, true])));
+      setTriedToSend(true);
+      setFormError(null);
+      const first = FOCUS_ORDER.find((field) => built.fieldErrors[field]);
+      if (first) document.getElementById(focusTarget(first))?.focus();
       return;
     }
 
@@ -240,43 +266,42 @@ export function ReportForm({ userId }: { userId: string }) {
   }
 
   const busy = submitting || photoBusy;
+  /** Problems shown in the summary once the user has tried to send (every validated field is touched then). */
+  const summary = (triedToSend ? FOCUS_ORDER : []).filter((field) => fieldErrors[field]).map(
+    (field) => [field, fieldErrors[field]!] as const,
+  );
 
   return (
     <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-6" aria-busy={submitting}>
+      {summary.length > 0 ? (
+        <div role="alert" className="rounded-lg border border-destructive/50 bg-destructive/5 p-3 text-sm">
+          <p className="font-semibold text-destructive">
+            {summary.length === 1 ? "1 thing needs fixing" : `${summary.length} things need fixing`} before you send:
+          </p>
+          <ul className="mt-1 list-disc pl-5">
+            {summary.map(([field, message]) => (
+              <li key={field}>
+                <a
+                  href={`#${focusTarget(field)}`}
+                  className="underline underline-offset-2"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    document.getElementById(focusTarget(field))?.focus();
+                  }}
+                >
+                  {message}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
       <fieldset className="flex flex-col gap-3">
         <legend className="mb-2 text-base font-semibold">Where did you see it?</legend>
         <p id="report-location-hint" className="text-sm text-muted-foreground">
-          Mark roughly where the smoke or fire is, not where you are standing. Investigators see this point; anyone
-          else only sees an area of about 1 km or more.
+          Mark roughly where the smoke or fire is, not where you are standing. Reports are accepted for {SERVICE_AREA.name}{" "}
+          only during this demo. Investigators see this point; anyone else only sees an area of about 1 km or more.
         </p>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="report-postcode">UK postcode or area</Label>
-          <div className="flex gap-2">
-            <Input
-              id="report-postcode"
-              autoComplete="off"
-              autoCapitalize="characters"
-              placeholder="e.g. M13 9PL or M13"
-              className="min-w-0 flex-1 sm:max-w-60"
-              value={postcode}
-              onChange={(e) => setPostcode(e.target.value)}
-              onKeyDown={(e) => {
-                // Enter here finds the postcode instead of sending the report.
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  void handleFindPostcode();
-                }
-              }}
-              aria-describedby="report-postcode-hint"
-            />
-            <Button type="button" variant="outline" onClick={handleFindPostcode} disabled={findingPostcode || submitting}>
-              {findingPostcode ? "Finding…" : "Find"}
-            </Button>
-          </div>
-          <p id="report-postcode-hint" className="text-sm text-muted-foreground">
-            The postcode nearest to the smoke. Only the resulting coordinates are sent with your report.
-          </p>
-        </div>
         <div>
           <Button type="button" variant="outline" onClick={handleUseLocation} disabled={locating || submitting}>
             {locating ? "Finding your location…" : "Use my approximate location"}
@@ -295,9 +320,13 @@ export function ReportForm({ userId }: { userId: string }) {
               id={fieldId("latitude")}
               inputMode="decimal"
               autoComplete="off"
-              placeholder="e.g. 53.4808"
+              placeholder={`e.g. ${SERVICE_AREA.example.latitude}`}
               value={latitude}
-              onChange={(e) => setLatitude(e.target.value)}
+              onChange={(e) => {
+                setLatitude(e.target.value);
+                handleChange("latitude", { latitude: e.target.value });
+              }}
+              onBlur={() => handleBlur("latitude")}
               aria-invalid={Boolean(fieldErrors.latitude)}
               aria-describedby={describedBy("latitude", "report-location-hint")}
             />
@@ -309,9 +338,13 @@ export function ReportForm({ userId }: { userId: string }) {
               id={fieldId("longitude")}
               inputMode="decimal"
               autoComplete="off"
-              placeholder="e.g. -2.2426"
+              placeholder={`e.g. ${SERVICE_AREA.example.longitude}`}
               value={longitude}
-              onChange={(e) => setLongitude(e.target.value)}
+              onChange={(e) => {
+                setLongitude(e.target.value);
+                handleChange("longitude", { longitude: e.target.value });
+              }}
+              onBlur={() => handleBlur("longitude")}
               aria-invalid={Boolean(fieldErrors.longitude)}
               aria-describedby={describedBy("longitude", "report-location-hint")}
             />
@@ -324,7 +357,11 @@ export function ReportForm({ userId }: { userId: string }) {
             id={fieldId("uncertaintyMeters")}
             className="h-9 w-full rounded-lg border border-input bg-background px-2.5 text-base sm:w-60 md:text-sm"
             value={uncertaintyMeters}
-            onChange={(e) => setUncertaintyMeters(Number(e.target.value))}
+            onChange={(e) => {
+              setUncertaintyMeters(Number(e.target.value));
+              handleChange("uncertaintyMeters", { uncertaintyMeters: Number(e.target.value) });
+            }}
+            onBlur={() => handleBlur("uncertaintyMeters")}
             aria-invalid={Boolean(fieldErrors.uncertaintyMeters)}
             aria-describedby={describedBy("uncertaintyMeters")}
           >
@@ -347,7 +384,11 @@ export function ReportForm({ userId }: { userId: string }) {
           className="sm:w-60"
           value={observedAtLocal}
           max={toDateTimeLocalValue(new Date())}
-          onChange={(e) => setObservedAtLocal(e.target.value)}
+          onChange={(e) => {
+            setObservedAtLocal(e.target.value);
+            handleChange("observedAt", { observedAtLocal: e.target.value });
+          }}
+          onBlur={() => handleBlur("observedAt")}
           aria-invalid={Boolean(fieldErrors.observedAt)}
           aria-describedby={describedBy("observedAt", "report-observedAt-hint")}
         />
@@ -363,16 +404,32 @@ export function ReportForm({ userId }: { userId: string }) {
           id={fieldId("description")}
           rows={4}
           maxLength={REPORT_DESCRIPTION_LENGTH.max}
-          placeholder="e.g. Grey smoke rising behind the hill to the north-west, getting thicker over 10 minutes."
+          placeholder="e.g. Grey smoke rising from the vineyard slope above Terzigno, drifting east and getting thicker over 10 minutes."
           value={description}
-          onChange={(e) => setDescription(e.target.value)}
+          onChange={(e) => {
+            setDescription(e.target.value);
+            handleChange("description", { description: e.target.value });
+          }}
+          onBlur={() => handleBlur("description")}
           aria-invalid={Boolean(fieldErrors.description)}
           aria-describedby={describedBy("description", "report-description-hint")}
         />
-        <p id="report-description-hint" className="text-sm text-muted-foreground">
-          {REPORT_DESCRIPTION_LENGTH.min}–{REPORT_DESCRIPTION_LENGTH.max.toLocaleString("en-GB")} characters (
-          {description.trim().length} so far). Smoke colour, direction, flames and how it changed all help.
-        </p>
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <p id="report-description-hint" className="text-sm text-muted-foreground">
+            At least {REPORT_DESCRIPTION_LENGTH.min} characters. Smoke colour, size, direction (towards the vines, a road,
+            houses) and how it changed all help.
+          </p>
+          <p
+            className={
+              description.trim().length >= REPORT_DESCRIPTION_LENGTH.max * DESCRIPTION_WARNING_RATIO
+                ? "text-xs font-medium text-amber-600 dark:text-amber-400"
+                : "text-xs text-muted-foreground"
+            }
+            aria-live="polite"
+          >
+            {description.trim().length.toLocaleString("en-GB")} / {REPORT_DESCRIPTION_LENGTH.max.toLocaleString("en-GB")}
+          </p>
+        </div>
         <FieldError name="description" errors={fieldErrors} />
       </div>
 
