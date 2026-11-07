@@ -309,3 +309,24 @@ export const VALIDATION_PROCESSORS: { vision: readonly TaskProcessor<never>[]; f
 
 /** Pass to `runPartitionDemo` / `createDemoAgents` as `onEvidence`. */
 export const VALIDATION_ON_EVIDENCE: { fusion: EvidenceHook } = { fusion: fusionOnEvidence };
+
+/**
+ * @deprecated Old names kept so branches written before the rename (#18) still
+ * build. Prefer VALIDATION_PROCESSORS, VALIDATION_ON_EVIDENCE, visionValidatorProcessor,
+ * fusionProcessor, fusionOnEvidence, visionTaskInputSchema and fusionTaskInputSchema.
+ */
+export const DANIL_PROCESSORS = VALIDATION_PROCESSORS;
+/** @deprecated Use VALIDATION_ON_EVIDENCE. */
+export const DANIL_ON_EVIDENCE = VALIDATION_ON_EVIDENCE;
+/** @deprecated Use visionValidatorProcessor. */
+export const danilVisionProcessor = visionValidatorProcessor;
+/** @deprecated Use fusionProcessor. */
+export const danilFusionProcessor = fusionProcessor;
+/** @deprecated Use fusionOnEvidence. */
+export const danilFusionOnEvidence = fusionOnEvidence;
+/** @deprecated Use visionTaskInputSchema. */
+export const danilVisionInputSchema = visionTaskInputSchema;
+/** @deprecated Use fusionTaskInputSchema. */
+export const danilFusionInputSchema = fusionTaskInputSchema;
+/** @deprecated Use VisionTaskInput. */
+export type DanilVisionInput = VisionTaskInput;

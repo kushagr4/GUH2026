@@ -102,4 +102,13 @@ export {
   toCanonicalRecommendation,
   toCanonicalVisionDraft,
   type VisionTaskInput,
+  // Deprecated aliases from before #18's rename.
+  DANIL_ON_EVIDENCE,
+  DANIL_PROCESSORS,
+  danilFusionInputSchema,
+  danilFusionOnEvidence,
+  danilFusionProcessor,
+  danilVisionInputSchema,
+  danilVisionProcessor,
+  type DanilVisionInput,
 } from "./runtime-processors";
