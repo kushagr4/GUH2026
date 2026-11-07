@@ -18,7 +18,7 @@ The active GreatUniHack project is **EmberGap**, a multi-agent wildfire-evidence
 | **Outrolife** | **NASA FIRMS API, GET map + investigation APIs, map/dashboard UI** | `feat/embergap-map-api` |
 | **d3vmakes** | Human-report form/UI, basic interaction tests and one short internal QA walkthrough | `feat/embergap-report-ui` |
 
-**Start in parallel.** Mac publishes shared types first; Outrolife can start the read APIs and map with deterministic mock fixtures without waiting for the backend. d3vmakes can start the form against mock POST responses. Mac is the sole owner of shared contracts, migrations, and root navigation. **Minimal manual user testing only:** one short internal walkthrough. Do not skip automated security, CI or critical agent correctness tests. Every change still uses a PR and one independent human reviewer.
+**Start in parallel.** Mac publishes shared types first; Outrolife can start the read APIs and map with deterministic mock fixtures without waiting for the backend. d3vmakes can start the form against mock POST responses. Mac is the sole owner of shared contracts, migrations, and root navigation. **Minimal manual user testing only:** one short internal walkthrough. Do not skip automated security, CI or critical agent correctness tests. Every change still uses a feature branch and PR, but no mandatory review; keep automated checks.
 
 ## Quick start
 
@@ -87,7 +87,7 @@ Running `npm run test:e2e` needs a browser the first time: `npx playwright insta
 
 ## Working as a team
 
-- **Changing the app?** Use a `feat/`, `fix/` or `chore/` branch, and open a draft pull request. It needs green **PR Checks** and one approval from a teammate before merging. See [docs/development-workflow.md](docs/development-workflow.md). Your dev server, local database and `.env.local` are yours alone, so your work never affects anyone else until it is merged.
+- **Changing the app?** Use a `feat/`, `fix/` or `chore/` branch, and open a normal pull request. No Claude self-review or human approval is required. Keep automated **PR Checks** and let the human owner merge. See [docs/development-workflow.md](docs/development-workflow.md). Your dev server, local database and `.env.local` are yours alone, so your work never affects anyone else until it is merged.
 - **Changing the database?** Write a migration, try it with `npm run local:migrate`, and include it in your PR. Teammates get it on their next `local:dev` after pulling. Only the migration owner applies it to the hosted project. See [docs/team-workflow.md](docs/team-workflow.md).
 - **Never reset the hosted database.** The demo's data lives there. A local reset only touches your own laptop, and still asks you to confirm.
 
@@ -99,7 +99,7 @@ Running `npm run test:e2e` needs a browser the first time: `npx playwright insta
 - [docs/sponsor-comparison.md](docs/sponsor-comparison.md): ElevenLabs, n8n, Firecrawl, Lovable and GitHub compared, with free-tier limits
 - [docs/integrations.md](docs/integrations.md): adding an external API, with timeouts, retries and rate limits
 - [docs/live-verification.md](docs/live-verification.md): live checks and a go/no-go list for ElevenLabs and n8n
-- [docs/development-workflow.md](docs/development-workflow.md): branches, draft PRs, reviews and merging, step by step
+- [docs/development-workflow.md](docs/development-workflow.md): feature branches, quick PRs, CI and human-controlled merging
 - [docs/debugging-workflow.md](docs/debugging-workflow.md): reproduce, find the root cause, test, fix
 - [docs/ci-and-reviews.md](docs/ci-and-reviews.md): what CI runs, fixing a red build, and what GitHub can and can't enforce
 - [docs/team-workflow.md](docs/team-workflow.md): migration ownership and schema changes
