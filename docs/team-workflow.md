@@ -6,17 +6,17 @@ Each teammate has their own local Supabase in Docker (see [docker-development.md
 
 Everyone has their own branch, dev server, local Supabase and `.env.local`, so this work can't disturb anyone else.
 
-Every change goes through a focused branch and a pull request that needs green **PR Checks** and one approval from someone other than its author. The steps are in [development-workflow.md](development-workflow.md). Keep `main` demoable at all times.
+Every change goes through an owned feature branch and a normal PR with automated **PR Checks** but **no mandatory Claude self-review or teammate approval**. The steps are in [development-workflow.md](development-workflow.md). Keep `main` demoable at all times.
 
 ## Migration ownership
 
-**One designated developer deploys migrations to the shared hosted project.** Every teammate may apply reviewed migrations locally. The name is in `supabase/MIGRATION_OWNER`.
+**One designated developer deploys migrations to the shared hosted project.** Every teammate may apply version-controlled migrations locally. The name is in `supabase/MIGRATION_OWNER`.
 
 | | Anyone | Migration owner |
 | --- | --- | --- |
 | Write a migration file in a PR | Yes | Yes |
 | `npm run db:lint` | Yes | Yes |
-| Review migration PRs | Yes | Required |
+| Validate locally and lint migrations | Yes | Required before hosted push |
 | `npm run db:push` | No | Yes |
 | Hold the Supabase login and secret key | No | Yes |
 
@@ -24,7 +24,7 @@ Every change goes through a focused branch and a pull request that needs green *
 
 To hand over, change `supabase/MIGRATION_OWNER` in a PR, invite the new owner to the Supabase organisation, and have them run the first three steps of [supabase-setup.md](supabase-setup.md).
 
-`.github/CODEOWNERS` names the owner as the reviewer for `supabase/`. GitHub can't enforce reviews on this private repo's plan, and may not request them automatically, so request the owner by hand and treat it as a team rule ([ci-and-reviews.md](ci-and-reviews.md#the-review-rule)).
+`supabase/MIGRATION_OWNER` identifies the one person authorised to apply hosted migrations. The owner checks schema readiness using local migration/lint tests, not a required PR approval.
 
 ## Changing the schema
 
@@ -32,8 +32,8 @@ To hand over, change `supabase/MIGRATION_OWNER` in a PR, invite the new owner to
 2. **Write it.** The template includes the required grants, RLS and policies.
 3. **Try it locally:** `npm run local:migrate`, then `npm run local:types`. Check it in the app, in Studio (<http://127.0.0.1:54323>) and with `npm run local:test`.
 4. **Check it:** `npm run db:lint`
-5. **Open a PR** containing only that migration, the regenerated types and the code that needs it.
-6. **The owner reviews it** (or, for the owner's own migration, a teammate does), and it's merged once approved.
+5. **Open a normal PR** containing the additive migration, generated local types and the code that needs it. No mandatory reviewer pass.
+6. **Run schema verification:** `npm run db:lint`, `npm run local:migrate` and relevant local RLS tests. The human repo owner merges after checking necessary CI results. No teammate approval is required.
 7. **The owner applies it to the hosted project** from an up-to-date `main`, then checks that the hosted types match. `db:push` refuses to run anywhere else:
 
 ```bash
@@ -57,7 +57,7 @@ npm run db:types -- --check
 ```
 
    The check compares the schema, not formatting, so types generated locally pass, and usually nothing more is needed. If it fails, the hosted schema differs from the migrations.
-8. **If the types check failed, the owner opens a PR with regenerated types**, like any other change, rather than pushing to `main`:
+8. **If the types check failed, the owner opens a normal PR with regenerated types**, rather than pushing directly to `main`:
 
 ```bash
 npm run db:types
@@ -76,10 +76,10 @@ git push -u origin HEAD
 ```
 
 ```bash
-gh pr create --draft --fill
+gh pr create --fill
 ```
 
-   A teammate approves it quickly.
+   The human repository owner merges when ready. No review gate.
 9. **Teammates pull.** Their next `npm run local:dev` applies the new migration to their own database.
 
 ### Keeping your code working until the migration lands
@@ -104,7 +104,7 @@ If two people add the same table, the second one to merge rewrites theirs as an 
 
 There's no reset on the hosted database. Write a new forward migration that corrects the mistake, and include a `-- migration-allow: destructive <reason>` line if it has to remove something. Locally, you may rebuild your own database from the files with `npm run local:reset -- --yes-delete-local-data`, which deletes your local data.
 
-## Reviewing a migration
+## Essential migration checks (not an approval gate)
 
 - Does every new public table have `enable row level security`, explicit grants and policies?
 - Are policies `to authenticated` and owner-scoped, with nothing granted to `anon`?
