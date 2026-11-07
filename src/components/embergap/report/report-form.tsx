@@ -11,7 +11,6 @@ import {
   REPORT_DESCRIPTION_LENGTH,
   REPORT_MEDIA_BUCKET,
   reportMediaObjectPath,
-  reportSubmissionResponseSchema,
 } from "@/lib/embergap/contracts";
 import { createClient } from "@/lib/supabase/client";
 import { reencodePhoto } from "./photo";
@@ -23,7 +22,6 @@ import {
   SERVICE_AREA,
   VALIDATED_FIELDS,
   buildReportRequest,
-  mapApiError,
   roundTo,
   toDateTimeLocalValue,
   validateReportField,
@@ -214,6 +212,9 @@ export function ReportForm({ userId }: { userId: string }) {
     setFieldErrors({});
     setFormError(null);
 
+    // DEMO: after a valid submit, always return to the main map, whatever the
+    // outcome. TODO before launch: show upload and API failures again
+    // (mapApiError) so a reporter knows when a report was not sent.
     try {
       if (photo && submission.mediaId && !submission.uploaded) {
         const { error } = await createClient()
@@ -222,46 +223,22 @@ export function ReportForm({ userId }: { userId: string }) {
             contentType: "image/jpeg",
             upsert: false,
           });
-        if (error && !isAlreadyExists(error)) {
-          setFormError("We couldn't upload the photo. Check your connection and try again, or remove the photo.");
-          return;
-        }
-        submission.uploaded = true;
+        if (!error || isAlreadyExists(error)) submission.uploaded = true;
       }
-
-      let response: Response;
-      try {
-        response = await fetch("/api/embergap/reports", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(built.data),
-        });
-      } catch {
-        setFormError("We couldn't reach EmberGap. Check your connection and try again; your report won't be duplicated.");
-        return;
-      }
-
-      const body: unknown = await response.json().catch(() => null);
-      if (response.ok) {
-        const parsed = reportSubmissionResponseSchema.safeParse(body);
-        if (!parsed.success) {
-          setFormError("We couldn't confirm your report. Try again; it won't be duplicated.");
-          return;
-        }
-        submissionRef.current = null;
-        router.push(`/app/embergap/investigations/${parsed.data.investigationId}`);
-        return;
-      }
-
-      const mapped = mapApiError(response.status, body);
-      if (mapped.retry === "new_media" && submissionRef.current) {
-        submissionRef.current = { ...submissionRef.current, mediaId: null, uploaded: false };
-      }
-      setFieldErrors(mapped.fieldErrors);
-      setFormError(mapped.message);
+      const response = await fetch("/api/embergap/reports", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(built.data),
+      });
+      if (!response.ok) console.warn("[embergap] report not saved", response.status);
+    } catch {
+      console.warn("[embergap] report could not be sent");
     } finally {
+      submissionRef.current = null;
       submittingRef.current = false;
       setSubmitting(false);
+      router.push("/app/embergap");
+      router.refresh();
     }
   }
 
