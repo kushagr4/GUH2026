@@ -67,3 +67,39 @@ export {
   type TimelineStep,
 } from "./timeline";
 export { TIMELINE_SCENARIOS, type TimelineScenario } from "./timeline-scenarios";
+export {
+  comparableRecommendation,
+  mergeFindingSets,
+  simulateDecentralisedFusion,
+  type DecentralisedEvent,
+  type DecentralisedInput,
+  type DecentralisedMetrics,
+  type DecentralisedNodeRecommendation,
+  type DecentralisedNodeView,
+  type DecentralisedPartition,
+  type DecentralisedPhase,
+  type DecentralisedResult,
+  type DecentralisedStep,
+  type FindingSet,
+  type GossipLink,
+} from "./decentralised";
+export {
+  DECENTRALISED_SCENARIOS,
+  type DecentralisedExpectedView,
+  type DecentralisedScenario,
+} from "./decentralised-scenarios";
+export {
+  DANIL_ON_EVIDENCE,
+  DANIL_PROCESSORS,
+  VISION_REASON_TO_CANONICAL,
+  danilFusionInputSchema,
+  danilFusionOnEvidence,
+  danilFusionProcessor,
+  danilVisionInputSchema,
+  danilVisionProcessor,
+  evidenceKey,
+  fromCanonicalFinding,
+  toCanonicalRecommendation,
+  toCanonicalVisionDraft,
+  type DanilVisionInput,
+} from "./runtime-processors";
