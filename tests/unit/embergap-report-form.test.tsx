@@ -10,6 +10,7 @@ import {
   toDateTimeLocalValue,
   type ReportFormValues,
 } from "@/components/embergap/report/report-request";
+import { lookupPostcode, parsePostcode, suggestedUncertaintyMeters } from "@/components/embergap/report/postcode";
 
 const push = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
@@ -112,6 +113,39 @@ describe("photo helpers", () => {
   });
 });
 
+describe("postcode lookup", () => {
+  it("normalises full postcodes and districts", () => {
+    expect(parsePostcode(" m13 9pl ")).toEqual({ kind: "full", value: "M139PL", display: "M13 9PL" });
+    expect(parsePostcode("sw1a1aa")?.display).toBe("SW1A 1AA");
+    expect(parsePostcode("M13")).toEqual({ kind: "outcode", value: "M13", display: "M13" });
+    expect(parsePostcode("not a postcode")).toBeNull();
+    expect(suggestedUncertaintyMeters("outcode")).toBe(5_000);
+  });
+
+  it("calls postcodes.io and returns the centre", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ status: 200, result: { latitude: 53.466926, longitude: -2.233578 } })));
+    const result = await lookupPostcode("M13 9PL", fetchMock as unknown as typeof fetch);
+    expect(result).toEqual({ ok: true, latitude: 53.466926, longitude: -2.233578, display: "M13 9PL", kind: "full" });
+    expect(String((fetchMock.mock.calls[0] as unknown as [string])[0])).toBe("https://api.postcodes.io/postcodes/M139PL");
+  });
+
+  it("uses the outcode endpoint for a district", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ status: 200, result: { latitude: 53.46, longitude: -2.21 } })));
+    await lookupPostcode("m13", fetchMock as unknown as typeof fetch);
+    expect(String((fetchMock.mock.calls[0] as unknown as [string])[0])).toBe("https://api.postcodes.io/outcodes/M13");
+  });
+
+  it("handles unknown postcodes, bad input and outages without calling out needlessly", async () => {
+    const notFound = vi.fn(async () => new Response(JSON.stringify({ status: 404, error: "Postcode not found" }), { status: 404 }));
+    expect(await lookupPostcode("ZZ1 1ZZ", notFound as unknown as typeof fetch)).toEqual({ ok: false, message: expect.stringMatching(/couldn't find ZZ1 1ZZ/) });
+    const never = vi.fn();
+    expect((await lookupPostcode("hello", never as unknown as typeof fetch)).ok).toBe(false);
+    expect(never).not.toHaveBeenCalled();
+    const down = vi.fn(async () => { throw new TypeError("network"); });
+    expect(await lookupPostcode("M13 9PL", down as unknown as typeof fetch)).toEqual({ ok: false, message: expect.stringMatching(/isn't available/) });
+  });
+});
+
 describe("ReportForm", () => {
   beforeEach(() => {
     push.mockReset();
@@ -179,6 +213,17 @@ describe("ReportForm", () => {
     const ids = fetchMock.mock.calls.map((call) => JSON.parse(String((call as unknown as [string, RequestInit])[1].body)).clientRequestId);
     expect(ids).toEqual([CLIENT_ID, CLIENT_ID]);
     expect(push).not.toHaveBeenCalled();
+  });
+
+  it("fills coordinates from a postcode and widens the radius for a district", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ status: 200, result: { latitude: 53.460476794, longitude: -2.215434566 } }))));
+    render(<ReportForm userId={USER_ID} />);
+    fireEvent.change(screen.getByLabelText("UK postcode or area"), { target: { value: "m13" } });
+    fireEvent.click(screen.getByRole("button", { name: "Find" }));
+    await waitFor(() => expect((screen.getByLabelText("Latitude") as HTMLInputElement).value).toBe("53.46048"));
+    expect((screen.getByLabelText("Longitude") as HTMLInputElement).value).toBe("-2.21543");
+    expect((screen.getByLabelText("How sure are you of that point?") as HTMLSelectElement).value).toBe("5000");
+    expect(screen.getByText(/centre of the M13 area/)).toBeTruthy();
   });
 
   it("does not send an invalid report", async () => {

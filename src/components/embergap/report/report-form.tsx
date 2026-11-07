@@ -15,7 +15,9 @@ import {
 } from "@/lib/embergap/contracts";
 import { createClient } from "@/lib/supabase/client";
 import { reencodePhoto } from "./photo";
+import { lookupPostcode, suggestedUncertaintyMeters } from "./postcode";
 import {
+  COORDINATE_DECIMALS,
   DEFAULT_UNCERTAINTY_METERS,
   GEOLOCATION_DECIMALS,
   UNCERTAINTY_OPTIONS,
@@ -59,6 +61,8 @@ export function ReportForm({ userId }: { userId: string }) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [locating, setLocating] = useState(false);
+  const [postcode, setPostcode] = useState("");
+  const [findingPostcode, setFindingPostcode] = useState(false);
   const [locationNote, setLocationNote] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<ReportFieldErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
@@ -101,6 +105,27 @@ export function ReportForm({ userId }: { userId: string }) {
         setLocating(false);
       },
       { enableHighAccuracy: false, timeout: 10_000, maximumAge: 60_000 },
+    );
+  }
+
+  async function handleFindPostcode() {
+    if (findingPostcode) return;
+    setLocationNote(null);
+    setFindingPostcode(true);
+    const result = await lookupPostcode(postcode);
+    setFindingPostcode(false);
+    if (!result.ok) {
+      setLocationNote(result.message);
+      return;
+    }
+    setLatitude(String(roundTo(result.latitude, COORDINATE_DECIMALS)));
+    setLongitude(String(roundTo(result.longitude, COORDINATE_DECIMALS)));
+    setUncertaintyMeters((current) => Math.max(current, suggestedUncertaintyMeters(result.kind)));
+    setFieldErrors((prev) => ({ ...prev, latitude: undefined, longitude: undefined, location: undefined }));
+    setLocationNote(
+      result.kind === "outcode"
+        ? `Using the centre of the ${result.display} area, so the radius is at least 5 km. Narrow it if you can.`
+        : `Using the centre of ${result.display}. Adjust the radius below if the smoke was further away.`,
     );
   }
 
@@ -224,6 +249,34 @@ export function ReportForm({ userId }: { userId: string }) {
           Mark roughly where the smoke or fire is, not where you are standing. Investigators see this point; anyone
           else only sees an area of about 1 km or more.
         </p>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="report-postcode">UK postcode or area</Label>
+          <div className="flex gap-2">
+            <Input
+              id="report-postcode"
+              autoComplete="off"
+              autoCapitalize="characters"
+              placeholder="e.g. M13 9PL or M13"
+              className="min-w-0 flex-1 sm:max-w-60"
+              value={postcode}
+              onChange={(e) => setPostcode(e.target.value)}
+              onKeyDown={(e) => {
+                // Enter here finds the postcode instead of sending the report.
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  void handleFindPostcode();
+                }
+              }}
+              aria-describedby="report-postcode-hint"
+            />
+            <Button type="button" variant="outline" onClick={handleFindPostcode} disabled={findingPostcode || submitting}>
+              {findingPostcode ? "Finding…" : "Find"}
+            </Button>
+          </div>
+          <p id="report-postcode-hint" className="text-sm text-muted-foreground">
+            The postcode nearest to the smoke. Only the resulting coordinates are sent with your report.
+          </p>
+        </div>
         <div>
           <Button type="button" variant="outline" onClick={handleUseLocation} disabled={locating || submitting}>
             {locating ? "Finding your location…" : "Use my approximate location"}
@@ -234,6 +287,7 @@ export function ReportForm({ userId }: { userId: string }) {
             </p>
           ) : null}
         </div>
+        <p className="text-sm font-medium">Or enter coordinates</p>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="flex flex-col gap-1.5">
             <Label htmlFor={fieldId("latitude")}>Latitude</Label>

@@ -57,7 +57,7 @@ export function localDateTimeToUtcIso(value: string): string | null {
 
 function parseCoordinate(raw: string, min: number, max: number, name: string): { value?: number; error?: string } {
   const trimmed = raw.trim();
-  if (trimmed === "") return { error: `Enter a ${name}, or use your approximate location.` };
+  if (trimmed === "") return { error: `Enter a ${name}, or find a postcode above.` };
   const value = Number(trimmed);
   if (!Number.isFinite(value)) return { error: `Enter the ${name} as a number, e.g. ${name === "latitude" ? "53.48" : "-2.24"}.` };
   if (value < min || value > max) return { error: `The ${name} must be between ${min} and ${max}.` };
