@@ -6,11 +6,16 @@ A reusable Next.js and Supabase foundation for GreatUniHack 2026. It contains ge
 
 ## Non-negotiable constraints
 
-- **No Docker and no local Postgres, on any machine.** Never run `supabase start`, `stop`, `status` or `db reset`, and don't add anything that needs a container runtime.
-- **One shared hosted Supabase project on the free plan.** Never enable paid services, add-ons or database branching, and never create billable resources.
-- **Never reset the shared database or delete teammates' data.** Migrations are additive. Tests touch only disposable users they create themselves.
-- **Only the designated migration owner deploys migrations** (`supabase/MIGRATION_OWNER`). Everyone else opens a PR containing the migration file.
-- **All schema changes go through version-controlled files** in `supabase/migrations/`. Never change the schema through the dashboard or MCP without a matching migration file.
+- **Local development runs on the Supabase CLI's own Docker stack.** `npm run local:dev` starts it, applies migrations, writes `.env.local` and runs Next.js. Don't add a separate Docker Compose stack for Supabase.
+- **Each teammate has an independent local database.** The hosted free-plan project is only for deployments and shared demos. Never enable paid services, add-ons or database branching, and never create billable resources.
+- **Never reset the hosted database or delete teammates' data.** Hosted migrations are additive. A local reset (`npm run local:reset -- --yes-delete-local-data`) wipes only the caller's own local data, so ask the user before running it.
+- **Only the designated migration owner deploys hosted migrations** (`supabase/MIGRATION_OWNER`). Everyone else opens a PR containing the migration file.
+- **All schema changes go through version-controlled files** in `supabase/migrations/`. Never change the schema through Studio, the dashboard or MCP without a matching migration file.
+- **Keep local and hosted commands apart.** `local:*` scripts are local only and never pass `--remote`. `db:status`, `db:plan`, `db:push`, `db:types`, `db:audit` and `db:sweep-tests` are hosted, owner-only operations. Don't call the CLI directly with `--remote`.
+
+## Local development
+
+Read `docs/docker-development.md`. With Docker Desktop running, `npm ci && npm run local:dev` is the whole setup, and it is safe to rerun. `npm run local:stop` keeps data. `npm run local:status` checks every service. The CLI's `start` and `status` output contains privileged local keys, so never print or log it: use the `local:*` scripts, which capture it. `.env.local` has a managed Supabase block. Keep sponsor and AI keys outside it.
 
 ## Architecture
 
@@ -39,13 +44,13 @@ scripts/            Node scripts, no shell-specific syntax. Only check-workflows
 .github/            CI (ci.yml, one "PR Checks" job), review status, PR template, CODEOWNERS
 .claude/            Skills (feature-dev, bugfix, self-review), helper agents, git guard hook
 tests/unit/         Mocked, no network. Runs everywhere
-tests/integration/  Real hosted project, disposable users. Owner only
-e2e/                Playwright. smoke needs no backend, hosted needs SUPABASE_TEST_*
+tests/integration/  Real Supabase (local via local:test, or hosted), disposable users
+e2e/                Playwright. smoke needs no backend, the signed-in journey needs SUPABASE_TEST_*
 ```
 
 ## Adding a feature
 
-1. If it needs data: `npm run db:new -- add_things`, and fill in the template. It needs explicit grants, RLS and policies in the same file. New public tables get no Data API access without explicit `GRANT`s.
+1. If it needs data: `npm run db:new -- add_things`, fill in the template, then `npm run local:migrate` and `npm run local:types`. It needs explicit grants, RLS and policies in the same file. New public tables get no Data API access without explicit `GRANT`s.
 2. Pages go in `src/app/app/<feature>/`, and are protected automatically.
 3. Create `src/features/<feature>/` with `repository.ts`, `actions.ts` and `components/`. Copy `src/features/account/` as the reference.
 4. Use `getCurrentUser()` or `requireUser()` from `@/lib/supabase/auth`, and `createClient()` from `@/lib/supabase/server`.
@@ -89,8 +94,8 @@ e2e/                Playwright. smoke needs no backend, hosted needs SUPABASE_TE
 | `dev`, `build`, `start` | Next.js |
 | `lint`, `typecheck` | ESLint and TypeScript |
 | `test`, `test:watch` | Mocked unit tests |
-| `test:integration` | Hosted RLS, auth, storage and Realtime tests (needs `.env.test.local`, public values only) |
-| `test:e2e` | Playwright. Hosted journeys skip without `SUPABASE_TEST_*` |
+| `test:integration` | RLS, auth, storage and Realtime tests against whatever `SUPABASE_TEST_*` points at (hosted via `.env.test.local`) |
+| `test:e2e` | Playwright. Signed-in journeys skip without `SUPABASE_TEST_*` |
 | `validate` | Everything that runs without the hosted project, including the build |
 | `preflight` | What CI's PR Checks job runs, in order, with a summary. Run before marking a PR ready |
 | `check:workflows`, `check:commits` | GitHub Actions workflow lint; Conventional Commit check of this branch's commits |
@@ -98,8 +103,12 @@ e2e/                Playwright. smoke needs no backend, hosted needs SUPABASE_TE
 | `db:new`, `db:lint` | Create and check migrations (anyone) |
 | `db:status`, `db:plan`, `db:push`, `db:types`, `db:audit`, `db:sweep-tests`, `env:share`, `env:test` | Hosted operations (migration owner) |
 | `secrets:scan`, `check:bundle` | Credential scan of files and history; scan of the built client bundle |
+| `local:dev`, `local:up`, `local:stop`, `local:status` | Run, stop and check the local Docker stack. Stopping keeps data |
+| `local:env`, `local:migrate`, `local:types` | Rewrite the `.env.local` Supabase block, apply new migrations locally, regenerate types locally |
+| `local:test` | Integration and Playwright tests against the local stack |
+| `local:reset` | Rebuild the local database. Deletes local data. Needs `-- --yes-delete-local-data` and the user's approval |
 
-Supabase CLI v3 targets the local stack by default, so hosted commands need `--remote`. The `db:*` scripts handle this. Prefer them over calling the CLI directly.
+Supabase CLI v3 targets the local stack by default, and hosted commands need `--remote`. The `local:*` and `db:*` scripts handle this. Prefer them over calling the CLI directly.
 
 ## Workflow: branches, PRs and reviews
 

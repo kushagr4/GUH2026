@@ -13,7 +13,7 @@ environment.
 
 - Write down the **exact failure**: the error text, the URL or command, the
   user, and the expected versus actual result.
-- Reproduce it yourself before changing anything: `npm run dev` and the steps,
+- Reproduce it yourself before changing anything: `npm run local:dev` and the steps,
   the failing test (`npx vitest run <file>`, `npx playwright test <file>`), or
   the failing CI step's log (`gh run view <id> --log-failed`).
 - If you can't reproduce it, say so, and gather more evidence rather than
@@ -23,7 +23,7 @@ environment.
 
 - Read the failing code path end to end, the related tests and the config.
 - Use the evidence the repo gives you: `/dev` diagnostics (is it the backend or
-  the code?), `npm run health`, server logs, the browser console, and the
+  the code?), `npm run local:status`, server logs, the browser console, and the
   Supabase logs and advisors through the read-only MCP.
 - Keep two lists, **observed** (seen in a log, a test or a reproduction) and
   **hypotheses** (not yet proven). Only observed facts justify a change.

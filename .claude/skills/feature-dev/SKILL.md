@@ -5,9 +5,10 @@ description: GUH2026's feature workflow - discovery, codebase exploration, a sim
 
 # Feature development in GUH2026
 
-Seven phases, scaled to the size of the change. The rules in `CLAUDE.md` (no
-Docker, one shared free-plan Supabase project, migrations through the owner,
-keys server-side, RLS everywhere) apply throughout. Track the phases with the
+Seven phases, scaled to the size of the change. The rules in `CLAUDE.md` (local
+Supabase in Docker through the `local:*` scripts, a hosted free-plan project
+changed only by the migration owner, keys server-side, RLS everywhere) apply
+throughout. Track the phases with the
 task list.
 
 ## Size it first
@@ -77,8 +78,10 @@ the files they name** yourself.
 ## Phase 5: Verification
 
 1. Run the relevant unit tests, then `npm run preflight` (what CI runs).
-2. Exercise the behaviour for real: `npm run dev`, sign in, and walk through the
-   acceptance criteria. For hosted behaviour, use `/dev` and the hosted E2E tests.
+2. Exercise the behaviour for real: `npm run local:dev`, sign in, and walk
+   through the acceptance criteria. If it touches data, auth, storage or
+   Realtime, also run `npm run local:test`. For hosted behaviour, use `/dev` and
+   the hosted E2E tests.
 3. Check each acceptance criterion and write down how you checked it. A
    compiling build is not verification.
 4. Report honestly: a skipped check is a skip, not a pass.

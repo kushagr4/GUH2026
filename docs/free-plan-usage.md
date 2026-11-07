@@ -29,6 +29,8 @@ Anyone can run this at any time. It uses only the publishable key, reads no rows
 npm run health
 ```
 
+It checks whichever project `.env.local` points at, which after `npm run local:dev` is your own local stack. To check the hosted project, the migration owner runs `npm run db:status`, or `npm run health` in a checkout whose `.env.local` points at hosted.
+
 For a browser view of every service including your session, open `/dev` while running in development.
 
 `GET /api/health` reports only whether the app is alive and makes no database call, so it's free to poll.
@@ -49,10 +51,10 @@ There is no usage API in this repo, so the dashboard is the source of truth.
 
 | When | Do this |
 | --- | --- |
-| The day before | Sign in to the dashboard to confirm the project is active. Run `npm run health` |
-| Morning of the event | Run `npm run health` from the venue network |
+| The day before | Sign in to the dashboard to confirm the project is active. Run `npm run db:status` |
+| Morning of the event | Open the deployed app from the venue network and sign in with the demo account |
 | During hacking | Glance at Organisation > Usage every couple of hours |
-| Before the demo | Run `npm run health`, and sign in with the demo account |
+| Before the demo | Sign in to the deployed app with the demo account, and check `/api/health` |
 
 For detail, use **Logs & Analytics** in the dashboard, or ask Claude Code to use the read-only Supabase MCP tools for logs and advisors.
 

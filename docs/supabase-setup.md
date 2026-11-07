@@ -1,8 +1,8 @@
 # Hosted Supabase setup (migration owner)
 
-Teammates don't need any of this. They only need the shared URL and publishable key.
+Teammates don't need any of this. They develop against their own local Supabase ([docker-development.md](docker-development.md)). The hosted project is for the deployed demo.
 
-This all runs without Docker. Supabase CLI v3 targets a local stack by default, so hosted commands need `--remote`. The `npm run db:*` scripts add it for you.
+Nothing on this page needs Docker. Supabase CLI v3 targets the local stack by default, so hosted commands need `--remote`. The `npm run db:*` scripts add it for you, and the `npm run local:*` scripts never do.
 
 ## 1. Create the project (free plan)
 

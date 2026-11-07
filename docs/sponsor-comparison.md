@@ -263,7 +263,7 @@ The safe options, from simplest:
 | **Webhooks** | Live push, issue and PR events into the app | About 45 min | `verifyWebhookSignature` checks `X-Hub-Signature-256` (HMAC-SHA256 of the raw body). Needs a deployed, public URL ([docs](https://docs.github.com/en/webhooks/using-webhooks/validating-webhook-deliveries)) |
 | **Actions** | Bots: PR summaries, issue triage, scheduled jobs | 30 to 90 min | CI already runs. Free private-repo usage is a $12 monthly allowance, about 2,000 Linux minutes ([billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions)). Store keys as repository secrets |
 | **GitHub App** | Acting on many repos with short-lived tokens | 2 h or more | GitHub's recommended model, but too slow for 6 hours unless the App is the product |
-| **Codespaces** | A browser dev environment for a teammate whose laptop fails | 10 min | 120 core-hours a month free, about 60 hours on 2 cores ([billing](https://docs.github.com/en/billing/concepts/product-billing/github-codespaces)). Everything in this repo runs without Docker, so it works there |
+| **Codespaces** | A browser dev environment for a teammate whose laptop fails | 10 min | 120 core-hours a month free, about 60 hours on 2 cores ([billing](https://docs.github.com/en/billing/concepts/product-billing/github-codespaces)). Local Supabase needs Docker inside the codespace. Without it, `npm run dev` against the hosted project still works |
 | **Pages** | Static hosting for a write-up or landing page | 15 min | Docs conflict about private repos on Free. Assume it needs a public repo |
 | **Copilot** | Faster coding | None | Copilot Student is free for verified students |
 

@@ -23,12 +23,14 @@ From [greatunihack.com](https://greatunihack.com), checked 5 November 2026. The 
 Migration owner:
 
 ```bash
-npm run health
+npm run db:status
 ```
+
+This compares the migration files with the hosted project's history, so it also shows the project is reachable. (`npm run health` checks whichever project `.env.local` points at, which is now usually your local one.)
 
 - Sign in to the Supabase dashboard, and confirm the project is active. Free projects pause after a week without activity.
 - Create one demo account per teammate through `/signup`, and record them somewhere private.
-- Add teammates' GitHub accounts to the repo, and send them the two shared values.
+- Add teammates' GitHub accounts to the repo. They don't need any Supabase values: each runs local Supabase. The hosted URL and publishable key go only into Vercel.
 
 Everyone:
 
@@ -37,14 +39,18 @@ git pull
 ```
 
 ```bash
-npm install
+npm ci
 ```
 
 ```bash
-npm run doctor
+npm run local:up
 ```
 
-If you'll run E2E tests, also run `npx playwright install chromium` while you're on good Wi-Fi.
+```bash
+npm run local:status
+```
+
+`local:up` downloads about 1.3 GB of Docker images the first time, so do it at home, not on venue Wi-Fi. Also run `npx playwright install chromium` while you're on good Wi-Fi if you'll run E2E tests.
 
 ## 10:30 to 12:00: at the venue
 
@@ -121,7 +127,7 @@ Commands you'll use most:
 
 | Situation | Command |
 | --- | --- |
-| Is it the backend or my code? | Open `/dev`, or run `npm run health` |
+| Is it the backend or my code? | Open `/dev`, or run `npm run local:status` |
 | Before marking a PR ready | `npm run preflight` |
 | New table or column | `npm run db:new -- <name>` |
 | Migration status (owner) | `npm run db:status` |

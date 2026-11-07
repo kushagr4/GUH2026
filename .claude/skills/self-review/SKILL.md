@@ -70,7 +70,7 @@ or **skipped: reason**. A silent skip reads as coverage.
 | `"use client"`, `NEXT_PUBLIC_`, `.env*`, `src/lib/integrations/**`, `src/lib/ai/**` | **Keys:** only the publishable key reaches the browser, secrets are read in `server-only` modules, external calls go through `createApiClient`, and `npm run check:bundle` and `npm run secrets:scan` pass |
 | External calls, AI, uploads, new routes | **Resource limits and errors:** timeouts, rate limits and budgets, upload size and type checks, failures mapped to friendly messages, and nothing in tests that spends money or calls a live API |
 | `repository.ts`, queries, `useTableChanges`, Realtime, polling | **Free plan and performance:** select only needed columns, `toPageRange` on every list, no polling, one filtered channel per component, no N+1 queries, no heavy client bundles |
-| `.github/**`, `.claude/**`, `scripts/**`, `package.json` | **Tooling:** `npm run check:workflows` passes, actions pinned to SHAs, least permissions, no secrets in the PR job, no container runtime, hook tests updated, dependencies pinned exactly and justified |
+| `.github/**`, `.claude/**`, `scripts/**`, `package.json` | **Tooling:** `npm run check:workflows` passes, actions pinned to SHAs, least permissions, no secrets in the PR job, no container runtime in CI, `local:*` scripts never pass `--remote`, hook tests updated, dependencies pinned exactly and justified |
 | Any behaviour change | **Regression coverage:** a test that would fail without the change, for a bug fix one that was seen failing first, hosted tests using only disposable users, unit tests without network |
 | Any of the above | **Architecture:** features in `src/features/<x>/`, thin routes, shared UI from `src/components/ui/`, conventions in `CLAUDE.md` |
 

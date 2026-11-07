@@ -55,8 +55,9 @@ run only:
 - **After merge:** on pushes to `main`, if the repository variable `RUN_HOSTED_TESTS` is `true`.
 
 Both need the `SUPABASE_TEST_URL` and `SUPABASE_TEST_PUBLISHABLE_KEY` Actions
-secrets, which are public values. Locally, anyone can run them with
-`.env.test.local` (see [supabase-setup.md](supabase-setup.md)).
+secrets, which are public values. Locally, anyone can run the same tests against
+their own Docker stack with `npm run local:test`, or against the hosted project
+with `.env.test.local` (see [supabase-setup.md](supabase-setup.md)).
 
 ### When CI fails
 
