@@ -8,6 +8,7 @@ export const siteConfig = {
   /** Links shown in the signed-in header. */
   nav: [
     { label: "Investigations", href: ROUTES.embergap },
+    { label: "Network", href: ROUTES.embergapNetwork },
     { label: "Account", href: ROUTES.account },
   ],
 } as const;
