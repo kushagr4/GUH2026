@@ -8,7 +8,7 @@ A reusable foundation for GreatUniHack 2026, now being developed into **EmberGap
 
 ## EmberGap: who builds what
 
-The active GreatUniHack project is **EmberGap**, a multi-agent wildfire-evidence investigation prototype. Full technical boundaries, API contracts and safety rules: [docs/architecture.md](docs/architecture.md#five-contributor-work-split-definitive-ownership). Agent-specific rules: [CLAUDE.md](CLAUDE.md) and [AGENTS.md](AGENTS.md).
+The active GreatUniHack project is **EmberGap**, a multi-agent wildfire-evidence investigation prototype. **Exact APIs, owner, keys and endpoints:** [docs/embergap-api-ownership.md](docs/embergap-api-ownership.md). Full technical boundaries, API contracts and safety rules: [docs/architecture.md](docs/architecture.md#five-contributor-work-split-definitive-ownership). Agent-specific rules: [CLAUDE.md](CLAUDE.md) and [AGENTS.md](AGENTS.md).
 
 | Contributor | Workstream | Dedicated branch |
 | --- | --- | --- |
