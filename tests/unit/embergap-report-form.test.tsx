@@ -256,7 +256,7 @@ describe("ReportForm", () => {
     fireEvent.change(screen.getByLabelText("Latitude"), { target: { value: "53.48" } });
     fireEvent.change(screen.getByLabelText("Longitude"), { target: { value: "-2.24" } });
     fireEvent.blur(screen.getByLabelText("Longitude"));
-    expect(await screen.findByText(/demo currently covers Italy/)).toBeTruthy();
+    expect(await screen.findByText(/currently covers Italy/)).toBeTruthy();
   });
 
   it("uses Italian emergency numbers and no UK-only postcode lookup", () => {

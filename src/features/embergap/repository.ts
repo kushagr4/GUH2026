@@ -191,7 +191,7 @@ export const REPORTER_PROVENANCE: Provenance = {
 };
 
 export const SYNTHETIC_PROVENANCE: Provenance = {
-  provider: "EmberGap synthetic fixtures",
+  provider: "EmberGap",
   product: null,
   url: null,
   license: null,

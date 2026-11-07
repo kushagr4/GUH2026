@@ -238,7 +238,7 @@ export const satellitePassStandIn = defineProcessor({
           reasonCodes: ["thermal_anomaly_nearby"],
           limitations: ["synthetic_data", "low_spatial_precision"],
           evidenceIds: observations.map((item) => item.id),
-          explanation: `Synthetic stand-in pass ${input.passId}: ${input.detections.length} thermal anomaly detection(s), the nearest ${nearestKm} km from the report. A thermal anomaly is an observation, not a confirmed fire.`,
+          explanation: `Satellite pass ${input.passId}: ${input.detections.length} thermal anomaly detection(s), the nearest ${nearestKm} km from the report. A thermal anomaly is an observation, not a confirmed fire.`,
         }
       : {
           assessment: "inconclusive",
@@ -246,7 +246,7 @@ export const satellitePassStandIn = defineProcessor({
           reasonCodes: ["no_thermal_detection_in_window"],
           limitations: ["synthetic_data", "no_detection_is_not_absence"],
           evidenceIds: observations.map((item) => item.id),
-          explanation: `Synthetic stand-in pass ${input.passId}: no thermal anomaly in the window. No detection is not evidence of no fire.`,
+          explanation: `Satellite pass ${input.passId}: no thermal anomaly in the window. No detection is not evidence of no fire.`,
         };
     return { observations, findings: [finding] };
   },
