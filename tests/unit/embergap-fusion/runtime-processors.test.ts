@@ -11,12 +11,12 @@ import {
 import { createDeterministicDeps, fuseFindings } from "@/lib/embergap/agents/fusion";
 import { FUSION_RULES_VERSION, GAP_REASON_CODES } from "@/lib/embergap/agents/fusion/rules";
 import {
-  DANIL_ON_EVIDENCE,
-  DANIL_PROCESSORS,
-  danilFusionOnEvidence,
-  danilFusionProcessor,
-  danilVisionInputSchema,
-  danilVisionProcessor,
+  VALIDATION_ON_EVIDENCE,
+  VALIDATION_PROCESSORS,
+  fusionOnEvidence,
+  fusionProcessor,
+  visionTaskInputSchema,
+  visionValidatorProcessor,
   evidenceKey,
   fromCanonicalFinding,
   toCanonicalRecommendation,
@@ -102,7 +102,7 @@ const visionInput = (extra: Record<string, unknown> = {}) => ({
   ...extra,
 });
 const runVision = (extra: Record<string, unknown> = {}, mode: RuntimeMode = "synthetic") => {
-  const result = danilVisionProcessor.run(context(danilVisionProcessor, visionInput(extra), { mode }));
+  const result = visionValidatorProcessor.run(context(visionValidatorProcessor, visionInput(extra), { mode }));
   return { result, finding: complete(result.findings![0], "vision") };
 };
 
@@ -166,11 +166,11 @@ describe("fusion over canonical findings", () => {
   });
 });
 
-describe("danilVisionProcessor", () => {
+describe("visionValidatorProcessor", () => {
   it("accepts the runtime stand-in's input unchanged", () => {
-    expect(danilVisionInputSchema.safeParse({ mediaId: MEDIA, reportObservedAt: NOW, labels: [], smokeLike: false }).success).toBe(true);
-    expect(danilVisionProcessor.kind).toBe("vision.assess");
-    expect(danilVisionProcessor.syntheticOnly).toBeUndefined();
+    expect(visionTaskInputSchema.safeParse({ mediaId: MEDIA, reportObservedAt: NOW, labels: [], smokeLike: false }).success).toBe(true);
+    expect(visionValidatorProcessor.kind).toBe("vision.assess");
+    expect(visionValidatorProcessor.syntheticOnly).toBeUndefined();
   });
 
   it("maps a clear-smoke fixture to a valid canonical supports finding with the required limitations", () => {
@@ -250,13 +250,13 @@ describe("danilVisionProcessor", () => {
   });
 });
 
-describe("danilFusionProcessor", () => {
+describe("fusionProcessor", () => {
   const sat = canonical({ agentId: "satellite", assessment: "supports", reasonCodes: ["thermal_anomaly_nearby"] });
   const vis = canonical({ agentId: "vision", assessment: "supports", reasonCodes: ["smoke_like_features_visible"], limitations: [...VISION_REQUIRED_LIMITATIONS] });
   const wea = canonical({ agentId: "weather", assessment: "context", reasonCodes: ["dry_or_windy_conditions"], limitations: ["weather_is_context_only"] });
 
   it("returns one valid fusion finding: context, null strength, canonical recommendation", () => {
-    const result = danilFusionProcessor.run(context(danilFusionProcessor, {}, { evidence: evidenceOf([sat, vis, wea]) }));
+    const result = fusionProcessor.run(context(fusionProcessor, {}, { evidence: evidenceOf([sat, vis, wea]) }));
     expect(result.findings).toHaveLength(1);
     expect(result.observations).toBeUndefined();
     const finding = complete(result.findings![0], "fusion");
@@ -282,7 +282,7 @@ describe("danilFusionProcessor", () => {
       reasonCodes: ["fusion.status.investigating"],
       recommendation: { recommendedStatus: "investigating", reviewPriority: "low", supportingFindingIds: [], contradictingFindingIds: [], evidenceGaps: [], possibleDuplicateReportIds: [] },
     });
-    const result = danilFusionProcessor.run(context(danilFusionProcessor, {}, { evidence: evidenceOf([earlier, sat, vis, wea]) }));
+    const result = fusionProcessor.run(context(fusionProcessor, {}, { evidence: evidenceOf([earlier, sat, vis, wea]) }));
     const expected = toCanonicalRecommendation(
       fuseFindings({ investigationId: INV, findings: [sat, vis, wea].map(fromCanonicalFinding) }, deps()),
     );
@@ -291,7 +291,7 @@ describe("danilFusionProcessor", () => {
   });
 
   it("with no evidence, recommends insufficient_evidence and lists every source as a gap", () => {
-    const finding = complete(danilFusionProcessor.run(context(danilFusionProcessor, {})).findings![0], "fusion");
+    const finding = complete(fusionProcessor.run(context(fusionProcessor, {})).findings![0], "fusion");
     expect(finding.recommendation?.recommendedStatus).toBe("insufficient_evidence");
     expect(finding.recommendation?.evidenceGaps).toHaveLength(4);
     expect(finding.limitations).toContain("no_detection_is_not_absence");
@@ -300,14 +300,14 @@ describe("danilFusionProcessor", () => {
   it("keeps contradictions visible for a human", () => {
     const witness = canonical({ agentId: "witness", assessment: "supports", reasonCodes: ["independent_reports_nearby"] });
     const visNo = canonical({ agentId: "vision", assessment: "contradicts", reasonCodes: ["no_smoke_like_features_visible"], limitations: [...VISION_REQUIRED_LIMITATIONS] });
-    const finding = complete(danilFusionProcessor.run(context(danilFusionProcessor, {}, { evidence: evidenceOf([sat, witness, visNo]) })).findings![0], "fusion");
+    const finding = complete(fusionProcessor.run(context(fusionProcessor, {}, { evidence: evidenceOf([sat, witness, visNo]) })).findings![0], "fusion");
     expect(finding.recommendation?.contradictingFindingIds).toEqual([visNo.id]);
     expect(finding.recommendation?.reviewPriority).toBe("high");
     expect(finding.explanation).toMatch(/contradiction/);
   });
 });
 
-describe("danilFusionOnEvidence", () => {
+describe("fusionOnEvidence", () => {
   const sat = canonical({ agentId: "satellite", assessment: "supports", reasonCodes: ["thermal_anomaly_nearby"] });
   const vis = canonical({ agentId: "vision", assessment: "supports", reasonCodes: ["smoke_like_features_visible"], limitations: [...VISION_REQUIRED_LIMITATIONS] });
   const fusionFinding = canonical({
@@ -319,7 +319,7 @@ describe("danilFusionOnEvidence", () => {
   const eventFor = (finding: CanonicalFinding) =>
     ({ investigationId: finding.investigationId, payload: { kind: "finding", finding } }) as unknown as RuntimeEvent;
   const hook = (held: CanonicalFinding[], fresh: CanonicalFinding[]) =>
-    danilFusionOnEvidence({ agentId: "fusion", now: 0, mode: "synthetic", evidence: evidenceOf(held), newEvents: fresh.map(eventFor) });
+    fusionOnEvidence({ agentId: "fusion", now: 0, mode: "synthetic", evidence: evidenceOf(held), newEvents: fresh.map(eventFor) });
 
   it("derives the task id from the evidence set, so each set fuses once", () => {
     const [task] = hook([sat], [sat]);
@@ -336,9 +336,9 @@ describe("danilFusionOnEvidence", () => {
   });
 
   it("is exported as the runtime's plug-in shape", () => {
-    expect(DANIL_PROCESSORS.vision.map((p) => p.kind)).toEqual(["vision.assess"]);
-    expect(DANIL_PROCESSORS.fusion.map((p) => p.kind)).toEqual(["fusion.fuse"]);
-    expect(DANIL_ON_EVIDENCE.fusion).toBe(danilFusionOnEvidence);
+    expect(VALIDATION_PROCESSORS.vision.map((p) => p.kind)).toEqual(["vision.assess"]);
+    expect(VALIDATION_PROCESSORS.fusion.map((p) => p.kind)).toEqual(["fusion.fuse"]);
+    expect(VALIDATION_ON_EVIDENCE.fusion).toBe(fusionOnEvidence);
   });
 });
 
@@ -347,7 +347,7 @@ describe("integration: Claude PC's partition demo with Danil's processors", () =
 
   const A = SYNTHETIC_SCENARIOS.find((s) => s.id === "partition-recovery")!.investigationId;
   const B = SYNTHETIC_SCENARIOS.find((s) => s.id === "weather-timeout")!.investigationId;
-  const run = (runId = "danil-integration") => runPartitionDemo({ runId, processors: DANIL_PROCESSORS, onEvidence: DANIL_ON_EVIDENCE });
+  const run = (runId = "danil-integration") => runPartitionDemo({ runId, processors: VALIDATION_PROCESSORS, onEvidence: VALIDATION_ON_EVIDENCE });
   const latestFusion = (result: PartitionDemoResult, investigationId: string) =>
     result.records!.findings
       .filter((f) => f.agentId === "fusion" && f.investigationId === investigationId)

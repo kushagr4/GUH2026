@@ -4,10 +4,11 @@
 //   separate EONET agent, so the weather agent carries both kinds of context.
 // - satellite: a SYNTHETIC stand-in for FIRMS detections. Outrolife's FIRMS
 //   adapter output replaces its task input; it never runs in live mode.
-// - vision: a SYNTHETIC stand-in for Danil's vision validator. Pass his
-//   processor for "vision.assess" to replace it.
-// - fusion: no processor here. Danil's fusion plugs in through `processors`
-//   and `onEvidence`; until then it simply holds a replica of the evidence.
+// - vision: the real vision validator (fusion/runtime-processors.ts): the
+//   guardrails run on model output fetched by the server before the task is
+//   queued. `visionStandIn` is kept only for comparison and old tests.
+// - fusion: the real deterministic evidence fusion, re-run by `fusionOnEvidence`
+//   once per distinct evidence set.
 // Every processor is synchronous and pure, and returns canonical records that
 // the agent validates with the contract's schemas before anything replicates.
 import { z } from "zod";
@@ -27,6 +28,11 @@ import { eonetContextSchema } from "@/lib/embergap/sources/eonet/types";
 import { weatherObservations } from "@/lib/embergap/sources/weather/observations";
 import { weatherContextSchema, type WeatherContext } from "@/lib/embergap/sources/weather/types";
 import { RuntimeAgent } from "../agent";
+import {
+  fusionOnEvidence,
+  fusionProcessor,
+  visionValidatorProcessor,
+} from "@/lib/embergap/agents/fusion/runtime-processors";
 import { defineProcessor, type EvidenceHook, type FindingDraft, type RuntimeMode, type TaskProcessor } from "../processors";
 
 export const DEMO_AGENT_IDS = ["fusion", "satellite", "vision", "weather"] as const satisfies readonly AgentId[];
@@ -276,8 +282,13 @@ export const visionStandIn = defineProcessor({
 export const DEFAULT_DEMO_PROCESSORS: Record<DemoAgentId, readonly TaskProcessor<never>[]> = {
   weather: [weatherContextProcessor, eonetContextProcessor, detectionContextProcessor] as unknown as TaskProcessor<never>[],
   satellite: [satellitePassStandIn] as unknown as TaskProcessor<never>[],
-  vision: [visionStandIn] as unknown as TaskProcessor<never>[],
-  fusion: [],
+  vision: [visionValidatorProcessor] as unknown as TaskProcessor<never>[],
+  fusion: [fusionProcessor] as unknown as TaskProcessor<never>[],
+};
+
+/** Default evidence hooks: fusion re-runs whenever its local evidence set changes. */
+export const DEFAULT_DEMO_ON_EVIDENCE: Partial<Record<DemoAgentId, EvidenceHook>> = {
+  fusion: fusionOnEvidence,
 };
 
 export type DemoAgentOptions = {
@@ -303,7 +314,7 @@ export function createDemoAgents(options: DemoAgentOptions): RuntimeAgent[] {
       runId: options.runId,
       peers: DEMO_AGENT_IDS.filter((peer) => peer !== id),
       processors: [...defaults, ...custom],
-      onEvidence: options.onEvidence?.[id],
+      onEvidence: options.onEvidence?.[id] ?? DEFAULT_DEMO_ON_EVIDENCE[id],
       store: options.store,
       mode,
       epochIso: options.epochIso,
