@@ -47,8 +47,13 @@ export type Id = z.infer<typeof idSchema>;
 export const timestampSchema = z.iso.datetime();
 export type Timestamp = z.infer<typeof timestampSchema>;
 
-export const latitudeSchema = z.number().min(-90).max(90);
-export const longitudeSchema = z.number().min(-180).max(180);
+/** Normalises a Date or a database timestamp ("...+00:00") to the contract's "Z" form. */
+export function toTimestamp(value: string | Date): Timestamp {
+  return new Date(value).toISOString();
+}
+
+export const latitudeSchema = z.number({ error: "Choose a point on the map." }).min(-90).max(90);
+export const longitudeSchema = z.number({ error: "Choose a point on the map." }).min(-180).max(180);
 
 export const coordinatesSchema = z.object({
   latitude: latitudeSchema,
@@ -63,15 +68,20 @@ export const LOCATION_UNCERTAINTY_METERS = { min: 100, max: 50_000 } as const;
  * standing, with the radius they are confident about. Exact values are visible
  * only to the reporter and authorised reviewers.
  */
-export const approximateLocationSchema = z.strictObject({
-  latitude: latitudeSchema,
-  longitude: longitudeSchema,
-  uncertaintyMeters: z
-    .number()
-    .int()
-    .min(LOCATION_UNCERTAINTY_METERS.min)
-    .max(LOCATION_UNCERTAINTY_METERS.max),
-});
+const RADIUS_MESSAGE = "Choose a radius between 100 m and 50 km.";
+
+export const approximateLocationSchema = z.strictObject(
+  {
+    latitude: latitudeSchema,
+    longitude: longitudeSchema,
+    uncertaintyMeters: z
+      .number({ error: RADIUS_MESSAGE })
+      .int(RADIUS_MESSAGE)
+      .min(LOCATION_UNCERTAINTY_METERS.min, RADIUS_MESSAGE)
+      .max(LOCATION_UNCERTAINTY_METERS.max, RADIUS_MESSAGE),
+  },
+  { error: "Drop a pin where you saw the smoke." },
+);
 export type ApproximateLocation = z.infer<typeof approximateLocationSchema>;
 
 /** Human-derived public locations are snapped to this grid (about 1.1 km). */
@@ -90,6 +100,19 @@ export const publicLocationSchema = z.object({
   precisionMeters: z.number().int().positive(),
 });
 export type PublicLocation = z.infer<typeof publicLocationSchema>;
+
+const onGrid = (value: number) => Math.abs(value * 100 - Math.round(value * 100)) < 1e-6;
+
+/**
+ * A public location derived from a human report: snapped to the grid and at
+ * least 1 km wide. Investigation summaries and investigation map markers must
+ * use it, so the reporter's chosen point can never reach the map.
+ */
+export const humanPublicLocationSchema = publicLocationSchema.refine(
+  (location) =>
+    location.precisionMeters >= PUBLIC_LOCATION_MIN_PRECISION_METERS && onGrid(location.latitude) && onGrid(location.longitude),
+  { message: "Use toPublicLocation() for human-derived locations." },
+);
 
 /** Rounds half away from zero, like Postgres `round(numeric, 2)`. */
 function snapToGrid(value: number): number {
@@ -132,6 +155,20 @@ export function parseBbox(value: string | null | undefined): Bbox | null {
   const parsed = bboxSchema.safeParse({ minLongitude, minLatitude, maxLongitude, maxLatitude });
   return parsed.success ? parsed.data : null;
 }
+
+/* Report photos (constants used by several shapes below) */
+
+/** Private bucket. Objects live at `<user id>/<media id>.<extension>`. */
+export const REPORT_MEDIA_BUCKET = "embergap-report-media";
+export const REPORT_MEDIA_MAX_BYTES = 5 * 1024 * 1024;
+export const REPORT_MEDIA_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
+export const reportMediaMimeTypeSchema = z.enum(REPORT_MEDIA_MIME_TYPES);
+export type ReportMediaMimeType = z.infer<typeof reportMediaMimeTypeSchema>;
+export const REPORT_MEDIA_EXTENSIONS: Record<ReportMediaMimeType, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+};
 
 /* -------------------------------------------------------------------------- */
 /* Sources, agents, states and statuses                                       */
@@ -178,7 +215,12 @@ export const INVESTIGATION_STATUSES = [
 export const investigationStatusSchema = z.enum(INVESTIGATION_STATUSES);
 export type InvestigationStatus = z.infer<typeof investigationStatusSchema>;
 
-/** Statuses software may set. Only an authorised human reviewer sets "reviewed". */
+/**
+ * Statuses software may set: the fusion agent's recommendation, applied by the
+ * runtime through EmberGapRuntimeStore.setAutomatedStatus. Only an authorised
+ * human reviewer sets "reviewed", and software never changes a reviewed
+ * investigation's status.
+ */
 export const AUTOMATED_INVESTIGATION_STATUSES = [
   "unreviewed",
   "investigating",
@@ -197,6 +239,126 @@ export const reviewPrioritySchema = z.enum(REVIEW_PRIORITIES);
 export type ReviewPriority = z.infer<typeof reviewPrioritySchema>;
 
 /* -------------------------------------------------------------------------- */
+/* Synthetic demonstration data                                               */
+/* -------------------------------------------------------------------------- */
+
+/** Badge text for anything with isSynthetic: true. */
+export const SYNTHETIC_DATA_LABEL = "Synthetic demo data";
+
+/**
+ * Shared labelled scenarios, so baseline and distributed runs use the same
+ * fixtures. Every workstream's fixtures for a scenario use its investigationId,
+ * reportIds, place and time, which match the rows seeded by the migration
+ * (syntheticId("core/<scenario>/investigation") and ".../report", or
+ * ".../report-2"). Use owner-prefixed syntheticId names for everything else.
+ * `groundTruth` is the evaluation label only: never show it as an agent output.
+ */
+export const SYNTHETIC_SCENARIOS = [
+  {
+    id: "corroborated-smoke",
+    title: "Smoke report near a recent thermal anomaly",
+    groundTruth: "fire",
+    investigationId: "00000000-1923-4596-a095-774098c7d58b",
+    reportIds: ["00000000-106e-47a9-a6eb-db11ac53887f"],
+    report: { latitude: 53.546, longitude: -1.982, uncertaintyMeters: 500, observedAt: "2026-11-07T09:05:00.000Z" },
+  },
+  {
+    id: "misleading-photo",
+    title: "Cloud photo reported as smoke",
+    groundTruth: "no_fire",
+    investigationId: "00000000-09fe-4107-b776-6dd00f9c3170",
+    reportIds: ["00000000-147e-4fbf-9e3e-fea1cf9c16c3"],
+    report: { latitude: 53.625, longitude: -2.521, uncertaintyMeters: 1_000, observedAt: "2026-11-07T09:40:00.000Z" },
+  },
+  {
+    id: "missing-satellite-pass",
+    title: "Credible report before any satellite pass",
+    groundTruth: "fire",
+    investigationId: "00000000-0b9a-4749-91c0-8a00faa295dd",
+    reportIds: ["00000000-0d26-4143-b8e1-aff19fe18752"],
+    report: { latitude: 53.384, longitude: -1.872, uncertaintyMeters: 750, observedAt: "2026-11-07T10:15:00.000Z" },
+  },
+  {
+    id: "weather-timeout",
+    title: "Weather source times out",
+    groundTruth: "fire",
+    investigationId: "00000000-0d80-4774-bb4d-26102d4b14fe",
+    reportIds: ["00000000-1fc0-4323-a8e3-55314f1a4833"],
+    report: { latitude: 53.602, longitude: -1.931, uncertaintyMeters: 1_500, observedAt: "2026-11-07T10:50:00.000Z" },
+  },
+  {
+    id: "repeated-witness",
+    title: "One witness reports the same smoke twice",
+    groundTruth: "fire",
+    investigationId: "00000000-1653-4361-8829-3801c69d3012",
+    reportIds: ["00000000-0318-4966-86dd-1d30955a62f6", "00000000-040f-47a7-a7ac-7ba099c9d49f"],
+    report: { latitude: 53.913, longitude: -1.832, uncertaintyMeters: 500, observedAt: "2026-11-07T11:20:00.000Z" },
+  },
+  {
+    id: "partition-recovery",
+    title: "Agents partitioned, then reconciled",
+    groundTruth: "fire",
+    investigationId: "00000000-1146-409b-8d51-0ea14dfbfa8f",
+    reportIds: ["00000000-0257-499c-9b8e-9c81906653c9"],
+    report: { latitude: 53.462, longitude: -1.853, uncertaintyMeters: 1_000, observedAt: "2026-11-07T11:45:00.000Z" },
+  },
+] as const;
+
+/**
+ * The fixed "now" for synthetic runs: use it as checkedAt and retrievedAt, so
+ * synthetic freshness doesn't depend on when the demo runs.
+ */
+export const SYNTHETIC_NOW = "2026-11-07T12:00:00.000Z";
+export type SyntheticScenarioId = (typeof SYNTHETIC_SCENARIOS)[number]["id"];
+export const syntheticScenarioIdSchema = z.enum(
+  SYNTHETIC_SCENARIOS.map((scenario) => scenario.id) as [SyntheticScenarioId, ...SyntheticScenarioId[]],
+);
+
+/** Synthetic IDs start with this group, so they are easy to spot in logs. */
+export const SYNTHETIC_ID_PREFIX = "00000000-";
+
+/** A small, deterministic string hash (cyrb53). Not cryptographic. */
+function hash53(text: string, seed: number): number {
+  let h1 = 0xdeadbeef ^ seed;
+  let h2 = 0x41c6ce57 ^ seed;
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+    h1 = Math.imul(h1 ^ code, 2_654_435_761);
+    h2 = Math.imul(h2 ^ code, 1_597_334_677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2_246_822_507) ^ Math.imul(h2 ^ (h2 >>> 13), 3_266_489_909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2_246_822_507) ^ Math.imul(h1 ^ (h1 >>> 13), 3_266_489_909);
+  return 4_294_967_296 * (2_097_151 & h2) + (h1 >>> 0);
+}
+
+/**
+ * A stable UUID for synthetic fixtures, derived from a name. Use a name that is
+ * unique to you, for example "firms/corroborated-smoke/detection-1". Works in
+ * the browser and in Node.
+ */
+export function syntheticId(name: string): string {
+  if (name.trim() === "") throw new Error("syntheticId needs a name.");
+  const hex = (hash53(name, 1).toString(16).padStart(14, "0") + hash53(name, 2).toString(16).padStart(14, "0")).slice(0, 23);
+  const variant = ((parseInt(hex[7], 16) & 0x3) | 0x8).toString(16);
+  return `${SYNTHETIC_ID_PREFIX}${hex.slice(0, 4)}-4${hex.slice(4, 7)}-${variant}${hex.slice(8, 11)}-${hex.slice(11, 23)}`;
+}
+
+export function isSyntheticId(id: string): boolean {
+  return id.startsWith(SYNTHETIC_ID_PREFIX) && idSchema.safeParse(id).success;
+}
+
+/**
+ * A stable UUID for real records that have none (a FIRMS row, an EONET event),
+ * so the same record keeps the same ID across requests. Never synthetic-looking.
+ * Example: stableId(`firms:${satellite}:${acqDate}:${acqTime}:${lat}:${lon}`).
+ */
+export function stableId(name: string): string {
+  const id = syntheticId(name);
+  const head = (hash53(name, 3) >>> 0).toString(16).padStart(8, "0").replace(/^0/, "1");
+  return `${head}${id.slice(SYNTHETIC_ID_PREFIX.length - 1)}`;
+}
+
+/* -------------------------------------------------------------------------- */
 /* Provenance and freshness                                                   */
 /* -------------------------------------------------------------------------- */
 
@@ -205,14 +367,30 @@ export const provenanceSchema = z.object({
   provider: z.string().trim().min(1).max(100),
   /** Dataset or product, for example "VIIRS_SNPP_NRT" or "forecast". */
   product: z.string().trim().min(1).max(100).nullable(),
-  /** A documentation or record page. NEVER a request URL, which can contain an API key. */
-  url: z.url({ protocol: /^https?$/ }).max(2_000).nullable(),
+  /** A documentation or record page. NEVER a request URL: FIRMS puts its key in the path. */
+  url: z
+    .url({ protocol: /^https?$/ })
+    .max(2_000)
+    .refine((url) => !url.includes("?") && !KEY_LIKE.test(url), { message: "Use a documentation page, not a request URL." })
+    .nullable(),
   license: z.string().trim().min(1).max(200).nullable(),
   isSynthetic: z.boolean(),
 });
 export type Provenance = z.infer<typeof provenanceSchema>;
 
-/** Default freshness windows. A source older than this is "stale". */
+/** Spread this into FIRMS observations and markers, then set product (for example "VIIRS_SNPP_NRT"). */
+export const FIRMS_PROVENANCE = {
+  provider: "NASA FIRMS",
+  product: null,
+  url: "https://firms.modaps.eosdis.nasa.gov/",
+  license: "NASA Earth Science data, openly shared",
+  isSynthetic: false,
+} as const satisfies Provenance;
+
+/**
+ * Default freshness windows: evidence further than this from the time of
+ * interest is "stale". An EONET event still open at that time counts as current.
+ */
 export const SOURCE_MAX_AGE_SECONDS: Record<SourceKind, number> = {
   human: 7 * 24 * 3_600,
   firms: 12 * 3_600,
@@ -222,17 +400,35 @@ export const SOURCE_MAX_AGE_SECONDS: Record<SourceKind, number> = {
 };
 
 /** Health of one source for a map view or an investigation. */
-export const sourceAvailabilitySchema = z.object({
-  source: sourceKindSchema,
-  state: sourceStateSchema,
-  /** When we last asked the source. */
-  checkedAt: timestampSchema,
-  /** The newest observation time we hold, or null if none. */
-  latestObservedAt: timestampSchema.nullable(),
-  maxAgeSeconds: z.number().int().positive(),
-  /** Safe to show users. No keys, URLs with keys or raw upstream errors. */
-  message: z.string().trim().min(1).max(300).nullable(),
-});
+/** FIRMS keys are 32 alphanumerics: anything that looks like one is refused. */
+const KEY_LIKE = /[A-Za-z0-9]{32,}/;
+
+export const sourceAvailabilitySchema = z
+  .object({
+    source: sourceKindSchema,
+    state: sourceStateSchema,
+    /** When we last asked the source. Omit sources that were never asked. */
+    checkedAt: timestampSchema,
+    /** The newest observation time we hold, or null if none. */
+    latestObservedAt: timestampSchema.nullable(),
+    maxAgeSeconds: z.number().int().positive(),
+    /** For "not_observed": the time window that was checked, so "none" never reads as "no fire". */
+    windowStart: timestampSchema.nullable().default(null),
+    windowEnd: timestampSchema.nullable().default(null),
+    /** Safe to show users. No keys, URLs with keys or raw upstream errors. */
+    message: z
+      .string()
+      .trim()
+      .min(1)
+      .max(300)
+      .refine((text) => !KEY_LIKE.test(text), { message: "That looks like an API key." })
+      .nullable(),
+  })
+  .superRefine((availability, ctx) => {
+    if (availability.state === "not_observed" && (availability.windowStart === null || availability.windowEnd === null)) {
+      ctx.addIssue({ code: "custom", path: ["windowStart"], message: "Say which time window found nothing." });
+    }
+  });
 export type SourceAvailability = z.infer<typeof sourceAvailabilitySchema>;
 
 /**
@@ -243,41 +439,70 @@ export function classifyFreshness(input: {
   latestObservedAt: string | null;
   checkedAt: string;
   maxAgeSeconds: number;
+  /**
+   * The time the evidence must describe: the report's observedAt for an
+   * investigation. Defaults to checkedAt, for live map views.
+   */
+  referenceAt?: string;
 }): Extract<SourceState, "available" | "stale" | "not_observed"> {
   if (input.latestObservedAt === null) return "not_observed";
-  const ageMs = Date.parse(input.checkedAt) - Date.parse(input.latestObservedAt);
-  return ageMs <= input.maxAgeSeconds * 1_000 ? "available" : "stale";
+  const distanceMs = Math.abs(Date.parse(input.referenceAt ?? input.checkedAt) - Date.parse(input.latestObservedAt));
+  return distanceMs <= input.maxAgeSeconds * 1_000 ? "available" : "stale";
 }
 
 /* -------------------------------------------------------------------------- */
 /* Observations (one source's data for one investigation)                     */
 /* -------------------------------------------------------------------------- */
 
-/** What was checked: needed to interpret "not_observed" honestly. */
+/**
+ * What was checked: needed to interpret "not_observed" honestly. windowEnd is
+ * the latest time the source is known to have covered (for FIRMS, the last
+ * satellite pass), never just the request time. If that is unknown, report the
+ * reason code satellite_pass_gap rather than no_thermal_detection_in_window.
+ */
 export const observationCoverageSchema = z
   .object({
     windowStart: timestampSchema,
     windowEnd: timestampSchema,
     radiusKm: z.number().positive().max(500),
   })
-  .refine((coverage) => Date.parse(coverage.windowStart) <= Date.parse(coverage.windowEnd), {
-    message: "windowStart must not be after windowEnd.",
+  .refine((coverage) => Date.parse(coverage.windowStart) < Date.parse(coverage.windowEnd), {
+    message: "windowStart must be before windowEnd.",
   });
 export type ObservationCoverage = z.infer<typeof observationCoverageSchema>;
 
-/** Thermal anomaly. A detection is an observation, not a confirmed fire. */
-export const firmsEvidenceSchema = z.looseObject({
+/**
+ * Thermal anomaly. A detection is an observation, not a confirmed fire. Extra
+ * provider fields are dropped: ask Mac to add one rather than passing it through.
+ */
+export const firmsEvidenceSchema = z.object({
   instrument: z.string().trim().min(1).max(50).nullable(),
   satellite: z.string().trim().min(1).max(50).nullable(),
-  /** FIRMS reports 0-100 for MODIS and low/nominal/high for VIIRS. */
+  /**
+   * FIRMS pixel detection confidence: MODIS sends a numeric string (use
+   * Number(confidence)), VIIRS sends l/n/h (map to low/nominal/high). It is not
+   * a probability of wildfire: never display it with "%".
+   */
   confidence: z.union([z.number().min(0).max(100), z.enum(["low", "nominal", "high"])]).nullable(),
   frpMegawatts: z.number().min(0).nullable(),
+  /** bright_ti4 for VIIRS, brightness for MODIS. */
   brightnessKelvin: z.number().positive().nullable(),
+  /** daynight: D becomes "day", N becomes "night". */
   dayNight: z.enum(["day", "night"]).nullable(),
+  /** From investigation.location (the public point), never from the private report point. */
   distanceKm: z.number().min(0).nullable(),
+  /** Processing version, for example "2.0NRT". */
+  version: z.string().trim().min(1).max(20).nullable().default(null),
+  /** Pixel size along scan and track, in km: the detection's spatial precision. */
+  scanKm: z.number().positive().nullable().default(null),
+  trackKm: z.number().positive().nullable().default(null),
 });
 
-export const weatherEvidenceSchema = z.looseObject({
+/**
+ * For weather, the observation's observedAt equals validAt: the time the value
+ * describes. Open-Meteo values are "modelled" or "forecast", never "observed".
+ */
+export const weatherEvidenceSchema = z.object({
   /** Whether the value was measured, modelled or forecast. */
   kind: z.enum(["observed", "modelled", "forecast"]),
   validAt: timestampSchema.nullable(),
@@ -285,11 +510,12 @@ export const weatherEvidenceSchema = z.looseObject({
   relativeHumidityPercent: z.number().min(0).max(100).nullable(),
   windSpeedKmh: z.number().min(0).max(500).nullable(),
   windDirectionDegrees: z.number().min(0).max(360).nullable(),
+  /** Total for the 24 hours ending at validAt. */
   precipitationMm: z.number().min(0).nullable(),
 });
 
 /** Curated natural-event context. Missing events are not a negative result. */
-export const eonetEvidenceSchema = z.looseObject({
+export const eonetEvidenceSchema = z.object({
   eventId: z.string().trim().min(1).max(100),
   title: z.string().trim().min(1).max(300),
   categories: z.array(z.string().trim().min(1).max(100)).max(20),
@@ -304,11 +530,15 @@ export const humanEvidenceSchema = z.object({
   hasMedia: z.boolean(),
 });
 
-/** Model-assisted description of a photo. Not authentication of the photo. */
+export const sha256Schema = z.string().regex(/^[0-9a-f]{64}$/, "Use a lowercase hex SHA-256.");
+
+/** Model-assisted description of a photo, emitted by the vision agent. Not authentication of the photo. */
 export const visionEvidenceSchema = z.object({
   mediaId: idSchema,
   model: z.string().trim().min(1).max(100).nullable(),
   labels: z.array(z.string().trim().min(1).max(100)).max(30),
+  /** Fingerprint of the exact bytes, for spotting the same photo in several reports. */
+  contentSha256: sha256Schema.nullable(),
 });
 
 const observationBaseSchema = z.object({
@@ -342,6 +572,35 @@ export const observationSchema = z
     if (hasData && observation.evidence === null) {
       ctx.addIssue({ code: "custom", path: ["evidence"], message: "Data needs its evidence." });
     }
+    if (!hasData && observation.evidence !== null) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["evidence"],
+        message: "No data means evidence: null. Never fill in zeros for a source that had nothing.",
+      });
+    }
+    if (observation.sourceState === "unavailable" && observation.observedAt !== null) {
+      ctx.addIssue({ code: "custom", path: ["observedAt"], message: "An unavailable source observed nothing." });
+    }
+    if (observation.source === "weather" && hasData && observation.evidence) {
+      const { temperatureC, relativeHumidityPercent, windSpeedKmh, windDirectionDegrees, precipitationMm } =
+        observation.evidence;
+      const measured = [temperatureC, relativeHumidityPercent, windSpeedKmh, windDirectionDegrees, precipitationMm];
+      if (measured.every((value) => value === null)) {
+        ctx.addIssue({ code: "custom", path: ["evidence"], message: "Weather data needs at least one measurement." });
+      }
+    }
+    if (
+      observation.source === "human" &&
+      observation.sourceRecordId !== null &&
+      observation.sourceRecordId !== observation.evidence?.reportId
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["sourceRecordId"],
+        message: "For human observations, sourceRecordId is null or the report ID, never a user ID.",
+      });
+    }
     if (observation.sourceState === "not_observed" && observation.coverage === null) {
       ctx.addIssue({
         code: "custom",
@@ -358,9 +617,11 @@ export type Observation = z.infer<typeof observationSchema>;
 
 /**
  * - supports / contradicts: this evidence points towards or away from the report.
+ *   Always with a strength.
  * - inconclusive: looked, could not tell.
  * - context: relevant background that cannot support or contradict on its own
- *   (weather, EONET).
+ *   (weather, EONET). Fusion findings are always "context": fusion's advice lives
+ *   only in its recommendation, so it is never counted as more support.
  */
 export const ASSESSMENTS = ["supports", "contradicts", "inconclusive", "context"] as const;
 export const assessmentSchema = z.enum(ASSESSMENTS);
@@ -371,8 +632,21 @@ export const EVIDENCE_STRENGTHS = ["weak", "moderate", "strong"] as const;
 export const evidenceStrengthSchema = z.enum(EVIDENCE_STRENGTHS);
 export type EvidenceStrength = z.infer<typeof evidenceStrengthSchema>;
 
-/** snake_case, so codes stay machine-readable. Prefer the well-known codes below. */
-export const reasonCodeSchema = z.string().regex(/^[a-z][a-z0-9_]{1,63}$/, "Use a snake_case reason code.");
+const VERDICT_WORDS =
+  /(^|[_.-])(confirm|confirmed|confirms|verified|verify|authentic|certain|certainty|probability|percent|proof|proven)([_.-]|$)/i;
+
+/**
+ * snake_case, optionally namespaced by agent and up to four segments
+ * ("witness.single_report", "fusion.rule.S2-two-independent"), so codes stay
+ * machine-readable. Prefer the well-known codes below. Codes that claim a
+ * verdict ("fire_confirmed", "vision.image_authentic") are rejected.
+ */
+export const reasonCodeSchema = z
+  .string()
+  .max(64)
+  .regex(/^[a-z][a-z0-9_]*(\.[A-Za-z0-9][A-Za-z0-9_-]*){0,3}$/, "Use a snake_case reason code, optionally agent-namespaced.")
+  .refine((code) => code.length >= 2, { message: "Use a snake_case reason code." })
+  .refine((code) => !VERDICT_WORDS.test(code), { message: "Reason codes describe evidence; they never claim a verdict." });
 
 /** Well-known reason codes. Agents may add their own snake_case codes. */
 export const REASON_CODES = [
@@ -405,6 +679,11 @@ export const LIMITATION_CODES = [
   "low_spatial_precision",
   "possible_shared_origin",
   "model_output_uncalibrated",
+  "model_output_invalid",
+  "unverifiable_claim_removed",
+  "description_withheld",
+  "human_report_unverified",
+  "heuristic_thresholds_uncalibrated",
   "synthetic_data",
 ] as const;
 export const limitationCodeSchema = z.enum(LIMITATION_CODES);
@@ -419,8 +698,11 @@ export const VISION_REQUIRED_LIMITATIONS = [
 
 /** The fusion agent's advice to a human. It can never mark anything reviewed or confirmed. */
 export const fusionRecommendationSchema = z.object({
-  recommendedStatus: z.enum(["needs_human_review", "insufficient_evidence"]),
+  /** "investigating" while evidence is still expected. Never "reviewed". */
+  recommendedStatus: z.enum(["investigating", "needs_human_review", "insufficient_evidence"]),
   reviewPriority: reviewPrioritySchema,
+  /** How many independent source types directly support the report. A count, not a probability. */
+  independentSourceCount: z.number().int().min(0).default(0),
   supportingFindingIds: z.array(idSchema).max(100),
   contradictingFindingIds: z.array(idSchema).max(100),
   /** Plain-language gaps, for example "No FIRMS pass since 09:00 UTC". */
@@ -428,11 +710,20 @@ export const fusionRecommendationSchema = z.object({
   possibleDuplicateReportIds: z.array(idSchema).max(50),
 });
 export type FusionRecommendation = z.infer<typeof fusionRecommendationSchema>;
+/** What producers may send: defaulted fields are optional. */
+export type FusionRecommendationInput = z.input<typeof fusionRecommendationSchema>;
 
 export const agentFindingSchema = z
   .object({
     id: idSchema,
     investigationId: idSchema,
+    /**
+     * The report this finding assesses, or null for investigation-wide findings
+     * (satellite, weather, fusion). A witness duplicate finding sets it to the
+     * later report and lists the earlier one in evidenceIds. The newest finding
+     * per (agentId, reportId) supersedes older ones; nothing is ever edited.
+     */
+    reportId: idSchema.nullable().default(null),
     agentId: agentIdSchema,
     createdAt: timestampSchema,
     /** Observation, report, media or finding IDs this finding is based on. */
@@ -444,6 +735,8 @@ export const agentFindingSchema = z
     /** Plain language, shown to reviewers. Treat as untrusted text when rendering. */
     explanation: z.string().trim().min(1).max(2_000),
     limitations: z.array(limitationCodeSchema).max(20),
+    /** Agent-specific caveats in plain language, shown beside the codes. */
+    limitationNotes: z.array(z.string().trim().min(1).max(300)).max(10).default([]),
     /** Required for the fusion agent, null for everyone else. */
     recommendation: fusionRecommendationSchema.nullable(),
     isSynthetic: z.boolean(),
@@ -469,15 +762,53 @@ export const agentFindingSchema = z
     if (finding.agentId === "fusion" && finding.recommendation === null) {
       ctx.addIssue({ code: "custom", path: ["recommendation"], message: "Fusion findings need a recommendation." });
     }
+    if (finding.agentId === "fusion" && (finding.assessment !== "context" || finding.strength !== null)) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["assessment"],
+        message: "Fusion advice lives in recommendation only: use assessment 'context' and strength null.",
+      });
+    }
     if (finding.agentId !== "fusion" && finding.recommendation !== null) {
       ctx.addIssue({ code: "custom", path: ["recommendation"], message: "Only the fusion agent recommends." });
     }
     const directional = finding.assessment === "supports" || finding.assessment === "contradicts";
+    const codes = new Set(finding.reasonCodes);
+    const absenceCodes = ["no_thermal_detection_in_window", "satellite_pass_gap", "source_unavailable", "source_stale"];
+    if (finding.assessment === "contradicts" && absenceCodes.some((code) => codes.has(code))) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["assessment"],
+        message: "Missing, stale or absent data can't contradict a report.",
+      });
+    }
+    const contextCodes = new Set(["dry_or_windy_conditions", "recent_precipitation", "eonet_wildfire_event_nearby"]);
+    if (directional && finding.reasonCodes.every((code) => contextCodes.has(code))) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["assessment"],
+        message: "Weather and EONET context alone can't support or contradict a report.",
+      });
+    }
+    if ((codes.has("no_thermal_detection_in_window") || codes.has("satellite_pass_gap")) && !finding.limitations.includes("no_detection_is_not_absence")) {
+      ctx.addIssue({ code: "custom", path: ["limitations"], message: "A non-detection must include no_detection_is_not_absence." });
+    }
+    if (finding.agentId === "weather" && !finding.limitations.includes("weather_is_context_only")) {
+      ctx.addIssue({ code: "custom", path: ["limitations"], message: "Weather findings must include weather_is_context_only." });
+    }
+    if (directional && finding.evidenceIds.length === 0) {
+      ctx.addIssue({ code: "custom", path: ["evidenceIds"], message: "Say which evidence a supporting or contradicting finding rests on." });
+    }
     if (!directional && finding.strength !== null) {
       ctx.addIssue({ code: "custom", path: ["strength"], message: "Only supports or contradicts have a strength." });
     }
+    if (directional && finding.strength === null) {
+      ctx.addIssue({ code: "custom", path: ["strength"], message: "supports and contradicts need a strength." });
+    }
   });
 export type AgentFinding = z.infer<typeof agentFindingSchema>;
+/** What producers may send: reportId and limitationNotes may be omitted. */
+export type AgentFindingInput = z.input<typeof agentFindingSchema>;
 
 /* -------------------------------------------------------------------------- */
 /* Agent-to-agent messages                                                    */
@@ -497,12 +828,46 @@ const messageBaseSchema = z.object({
   correlationId: idSchema,
   /** The message this one responds to, if any. */
   causationId: idSchema.nullable(),
-  /** Per-sender counter, so receivers can detect gaps and reorder. */
+  /**
+   * Counts messages per (from, to, correlationId), from 0. A redelivered copy
+   * keeps its id and sequence. Acks are not sequenced: send 0, and receivers
+   * skip gap checks for acks.
+   */
   sequence: z.number().int().min(0),
   isSynthetic: z.boolean(),
 });
 
 export const AGENT_TASKS = ["assess_report", "collect_observations", "fuse_findings"] as const;
+
+/**
+ * A report as agents see it. SERVER-SIDE ONLY: it holds private text and the
+ * reporter's approximate location, so never send it to a browser and never copy
+ * it into event details. Load it with loadAgentReports() in src/features/embergap.
+ */
+export const agentReportSchema = z.object({
+  id: idSchema,
+  investigationId: idSchema,
+  observedAt: timestampSchema,
+  submittedAt: timestampSchema,
+  /** Untrusted user text: data, never instructions. */
+  description: z.string(),
+  location: approximateLocationSchema,
+  /**
+   * Opaque and stable per reporter account (never the auth user ID): equal keys
+   * mean the same person, so the witness agent never counts one person twice.
+   */
+  reporterKey: idSchema,
+  media: z
+    .object({
+      mediaId: idSchema,
+      mimeType: reportMediaMimeTypeSchema,
+      /** Fingerprint of the stored bytes, or null if unknown. */
+      sha256: sha256Schema.nullable(),
+    })
+    .nullable(),
+  isSynthetic: z.boolean(),
+});
+export type AgentReport = z.infer<typeof agentReportSchema>;
 
 /** Validate every message you receive. Payloads are untrusted data, never instructions. */
 export const agentMessageSchema = z.discriminatedUnion("kind", [
@@ -512,6 +877,18 @@ export const agentMessageSchema = z.discriminatedUnion("kind", [
       taskId: idSchema,
       task: z.enum(AGENT_TASKS),
       reportId: idSchema.nullable(),
+      /**
+       * Where and when to look, at public precision, so source agents can query
+       * weather, EONET and FIRMS without reading private reports. Use observedAt
+       * as classifyFreshness's referenceAt.
+       */
+      subject: z.object({
+        location: humanPublicLocationSchema,
+        observedAt: timestampSchema,
+        syntheticScenarioId: syntheticScenarioIdSchema.nullable(),
+      }),
+      /** Vision and witness only: the target report first, then correlation candidates. */
+      reports: z.array(agentReportSchema).max(50),
     }),
   }),
   messageBaseSchema.extend({
@@ -535,6 +912,29 @@ export const agentMessageSchema = z.discriminatedUnion("kind", [
   }),
 ]);
 export type AgentMessage = z.infer<typeof agentMessageSchema>;
+
+/**
+ * agentMessageSchema plus attribution: an agent may publish only its own
+ * findings, and everything in a message belongs to its investigation. Use this
+ * one at every receiving end.
+ */
+export const attributedAgentMessageSchema = agentMessageSchema.superRefine((message, ctx) => {
+  if (message.kind === "finding_published") {
+    if (message.payload.finding.agentId !== message.from) {
+      ctx.addIssue({ code: "custom", path: ["payload", "finding", "agentId"], message: "Agents publish only their own findings." });
+    }
+    if (message.payload.finding.investigationId !== message.investigationId) {
+      ctx.addIssue({ code: "custom", path: ["payload", "finding"], message: "The finding belongs to another investigation." });
+    }
+  }
+  if (message.kind === "observations_shared") {
+    message.payload.observations.forEach((observation, index) => {
+      if (observation.investigationId !== message.investigationId) {
+        ctx.addIssue({ code: "custom", path: ["payload", "observations", index], message: "The observation belongs to another investigation." });
+      }
+    });
+  }
+});
 export type AgentMessageKind = AgentMessage["kind"];
 
 /* -------------------------------------------------------------------------- */
@@ -560,7 +960,32 @@ export type AgentEventType = z.infer<typeof agentEventTypeSchema>;
 
 export const AGENT_EVENT_DETAILS_MAX_BYTES = 8_192;
 
-export const agentEventSchema = z.object({
+/*
+ * Event details are shown to everyone who can see the investigation. Never put
+ * report text, coordinates, photos, user IDs or upstream errors in them.
+ *
+ * Who records what: report intake records report_submitted (key
+ * "report_submitted:<reportId>", done by the database) and task_queued
+ * ("task_queued:<taskId>"). The runtime records every other type except
+ * review_recorded, keyed "<type>:<id>[:<attempt>]". Partition events are
+ * recorded once per in-flight investigation, keyed "<type>:<partitionId>".
+ */
+
+/** details of partition_started and partition_healed. */
+export const partitionEventDetailsSchema = z.object({
+  partitionId: idSchema,
+  isolated: z.array(agentIdSchema).min(1),
+});
+
+/** details of reconciled: the numbers the partition demo shows. */
+export const reconciledEventDetailsSchema = partitionEventDetailsSchema.extend({
+  redelivered: z.number().int().min(0),
+  duplicatesIgnored: z.number().int().min(0),
+  completedWhileIsolated: z.number().int().min(0),
+});
+
+export const agentEventSchema = z
+  .object({
   id: idSchema,
   investigationId: idSchema,
   type: agentEventTypeSchema,
@@ -580,7 +1005,24 @@ export const agentEventSchema = z.object({
       message: `details must be at most ${AGENT_EVENT_DETAILS_MAX_BYTES} bytes of JSON.`,
     }),
   isSynthetic: z.boolean(),
-});
+  })
+  .superRefine((event, ctx) => {
+    if (event.type === "review_recorded" && event.actor !== "reviewer") {
+      ctx.addIssue({ code: "custom", path: ["actor"], message: "Only a reviewer records a review." });
+    }
+    if (event.actor === "reporter" && event.type !== "report_submitted") {
+      ctx.addIssue({ code: "custom", path: ["type"], message: "Reporters only submit reports." });
+    }
+    const detailsSchema =
+      event.type === "reconciled"
+        ? reconciledEventDetailsSchema
+        : event.type === "partition_started" || event.type === "partition_healed"
+          ? partitionEventDetailsSchema
+          : null;
+    if (detailsSchema && !detailsSchema.safeParse(event.details).success) {
+      ctx.addIssue({ code: "custom", path: ["details"], message: `${event.type} needs its partition details.` });
+    }
+  });
 export type AgentEvent = z.infer<typeof agentEventSchema>;
 
 /* -------------------------------------------------------------------------- */
@@ -593,21 +1035,22 @@ export const REPORT_MAX_AGE_HOURS = 72;
 /** Allowed clock skew for observedAt in the future. */
 export const REPORT_FUTURE_TOLERANCE_MS = 5 * 60_000;
 
-/** Private bucket. Objects live at `<user id>/<media id>.<extension>`. */
-export const REPORT_MEDIA_BUCKET = "embergap-report-media";
-export const REPORT_MEDIA_MAX_BYTES = 5 * 1024 * 1024;
-export const REPORT_MEDIA_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
-export const reportMediaMimeTypeSchema = z.enum(REPORT_MEDIA_MIME_TYPES);
-export type ReportMediaMimeType = z.infer<typeof reportMediaMimeTypeSchema>;
-export const REPORT_MEDIA_EXTENSIONS: Record<ReportMediaMimeType, string> = {
-  "image/jpeg": "jpg",
-  "image/png": "png",
-  "image/webp": "webp",
-};
-
 /**
- * The only valid Storage path for a report photo. The browser uploads to it
- * with the signed-in user's client, then sends the mediaId in the report.
+ * The only valid Storage path for a report photo. Do not use ownerObjectPath.
+ *
+ * Browser flow (d3vmakes):
+ * 1. Re-encode the photo first, which drops EXIF metadata such as GPS:
+ *    createImageBitmap(file), draw it on a canvas (longest side at most 2048 px),
+ *    then canvas.toBlob(..., "image/jpeg", 0.85). The API rejects photos that still
+ *    carry EXIF or XMP. Apply REPORT_MEDIA_MAX_BYTES to the re-encoded blob.
+ * 2. mediaId = crypto.randomUUID(). Take userId from requireUser() in the page
+ *    (a Server Component) and pass it to the form as a prop, as
+ *    src/app/dev/storage/page.tsx does.
+ * 3. Upload with the browser client: storage.from(REPORT_MEDIA_BUCKET)
+ *    .upload(reportMediaObjectPath(userId, mediaId, "image/jpeg"), blob,
+ *    { contentType: "image/jpeg", upsert: false }). On a retry, an "already
+ *    exists" error means it is already uploaded.
+ * 4. POST the report with media: { mediaId, mimeType: "image/jpeg" }.
  */
 export function reportMediaObjectPath(userId: string, mediaId: string, mimeType: ReportMediaMimeType): string {
   if (!idSchema.safeParse(userId).success || !idSchema.safeParse(mediaId).success) {
@@ -626,39 +1069,48 @@ export type ReportMediaUpload = z.infer<typeof reportMediaUploadSchema>;
 const CONTROL_CHARACTERS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/;
 
 export const reportDescriptionSchema = z
-  .string()
+  .string({ error: "Describe what you saw." })
   .trim()
-  .min(REPORT_DESCRIPTION_LENGTH.min)
-  .max(REPORT_DESCRIPTION_LENGTH.max)
+  .min(REPORT_DESCRIPTION_LENGTH.min, "Describe what you saw in at least 10 characters.")
+  .max(REPORT_DESCRIPTION_LENGTH.max, "Keep the description under 2,000 characters.")
   .refine((text) => !CONTROL_CHARACTERS.test(text), { message: "Remove control characters." });
+
+/** When it was seen: UTC, not in the future (5 minutes' grace), at most 72 hours ago. */
+export const reportObservedAtSchema = z.iso.datetime({ error: "Enter when you saw it." }).superRefine((value, ctx) => {
+  const observedAt = Date.parse(value);
+  const now = Date.now();
+  if (observedAt > now + REPORT_FUTURE_TOLERANCE_MS) {
+    ctx.addIssue({ code: "custom", message: "That time is in the future." });
+  }
+  if (observedAt < now - REPORT_MAX_AGE_HOURS * 3_600_000) {
+    ctx.addIssue({ code: "custom", message: `Reports must be about something seen in the last ${REPORT_MAX_AGE_HOURS} hours.` });
+  }
+});
 
 /**
  * Body of POST /api/embergap/reports. Strict: unknown fields such as a
  * reporter ID, status or synthetic flag are rejected, because the server sets them.
+ * The rules are per field, so `.pick()` and `.partial()` work for form steps.
+ *
+ * Retries: keep clientRequestId and mediaId for every retry of one submission,
+ * and make new ones only after a 2xx response or for a new report. A known
+ * clientRequestId always returns the stored report (200, replayed: true),
+ * whatever the body. Errors:
+ * - media_invalid: no valid photo at the path. Re-upload to the same path, or
+ *   remove the photo, then retry with the same ids.
+ * - conflict: that photo is already attached to another report. Use a new mediaId.
+ * - validation_failed: fieldErrors holds z.flattenError(...).fieldErrors, keyed by
+ *   top-level field; run this schema in the browser first for full paths.
+ * - rate_limited: wait retryAfterSeconds.
  */
-export const reportSubmissionRequestSchema = z
-  .strictObject({
-    /** Idempotency key from `crypto.randomUUID()`. Retrying with it returns the same report. */
-    clientRequestId: idSchema,
-    observedAt: timestampSchema,
-    location: approximateLocationSchema,
-    description: reportDescriptionSchema,
-    media: reportMediaUploadSchema.nullable().default(null),
-  })
-  .superRefine((report, ctx) => {
-    const observedAt = Date.parse(report.observedAt);
-    const now = Date.now();
-    if (observedAt > now + REPORT_FUTURE_TOLERANCE_MS) {
-      ctx.addIssue({ code: "custom", path: ["observedAt"], message: "The observation time is in the future." });
-    }
-    if (observedAt < now - REPORT_MAX_AGE_HOURS * 3_600_000) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["observedAt"],
-        message: `Reports must be about something seen in the last ${REPORT_MAX_AGE_HOURS} hours.`,
-      });
-    }
-  });
+export const reportSubmissionRequestSchema = z.strictObject({
+  /** Idempotency key from `crypto.randomUUID()`. */
+  clientRequestId: idSchema,
+  observedAt: reportObservedAtSchema,
+  location: approximateLocationSchema,
+  description: reportDescriptionSchema,
+  media: reportMediaUploadSchema.nullable().default(null),
+});
 export type ReportSubmissionRequest = z.infer<typeof reportSubmissionRequestSchema>;
 /** What the browser sends (media may be omitted). */
 export type ReportSubmissionInput = z.input<typeof reportSubmissionRequestSchema>;
@@ -716,8 +1168,10 @@ export type ApiErrorResponse = z.infer<typeof apiErrorResponseSchema>;
 export const investigationSummarySchema = z.object({
   id: idSchema,
   status: investigationStatusSchema,
+  /** A reviewer's judgement once status is "reviewed". "reviewed" alone never means confirmed. */
+  reviewOutcome: reviewOutcomeSchema.nullable(),
   reviewPriority: reviewPrioritySchema.nullable(),
-  location: publicLocationSchema,
+  location: humanPublicLocationSchema,
   openedAt: timestampSchema,
   updatedAt: timestampSchema,
   /** Newest observation or report time, or null if there is none yet. */
@@ -732,7 +1186,6 @@ export type InvestigationSummary = z.infer<typeof investigationSummarySchema>;
 
 export const investigationSchema = investigationSummarySchema
   .extend({
-    reviewOutcome: reviewOutcomeSchema.nullable(),
     reviewedAt: timestampSchema.nullable(),
     reviewNote: z.string().trim().min(1).max(2_000).nullable(),
   })
@@ -744,6 +1197,9 @@ export const investigationSchema = investigationSummarySchema
         path: ["status"],
         message: "Only a reviewed investigation has a review outcome and time, and it must have both.",
       });
+    }
+    if (investigation.reviewNote !== null && investigation.reviewOutcome === null) {
+      ctx.addIssue({ code: "custom", path: ["reviewNote"], message: "A review note needs a review." });
     }
   });
 export type Investigation = z.infer<typeof investigationSchema>;
@@ -793,6 +1249,32 @@ export const investigationDetailResponseSchema = z.object({
   events: z.array(agentEventSchema).max(200),
   sourceAvailability: z.array(sourceAvailabilitySchema).max(SOURCE_KINDS.length),
   generatedAt: timestampSchema,
+}).superRefine((detail, ctx) => {
+  if (detail.viewerAccess === "synthetic") {
+    const real =
+      !detail.investigation.isSynthetic ||
+      detail.reports.some((report) => !report.isSynthetic) ||
+      detail.media.some((media) => !media.isSynthetic);
+    if (real) ctx.addIssue({ code: "custom", path: ["viewerAccess"], message: "A synthetic view can't contain real reports or photos." });
+  }
+  const visibleReports = new Set(detail.reports.map((report) => report.id));
+  detail.media.forEach((media, index) => {
+    if (!visibleReports.has(media.reportId)) {
+      ctx.addIssue({ code: "custom", path: ["media", index], message: "Photos are listed only with a report the viewer can see." });
+    }
+    if (!media.isSynthetic && media.url !== null && media.urlExpiresAt === null) {
+      ctx.addIssue({ code: "custom", path: ["media", index, "urlExpiresAt"], message: "Signed photo URLs must expire." });
+    }
+  });
+  const visibleMedia = new Set(detail.media.map((media) => media.id));
+  detail.observations.forEach((observation, index) => {
+    if (observation.source === "human" && observation.evidence && !visibleReports.has(observation.evidence.reportId)) {
+      ctx.addIssue({ code: "custom", path: ["observations", index], message: "Human observations are listed only with a visible report." });
+    }
+    if (observation.source === "vision" && observation.evidence && !visibleMedia.has(observation.evidence.mediaId)) {
+      ctx.addIssue({ code: "custom", path: ["observations", index], message: "Vision observations are listed only with a visible photo." });
+    }
+  });
 });
 export type InvestigationDetailResponse = z.infer<typeof investigationDetailResponseSchema>;
 
@@ -821,18 +1303,28 @@ export const MAP_FEATURE_KINDS = ["investigation", "thermal_anomaly", "context_e
 
 /** One map marker. Investigations use a coarsened `toPublicLocation`. */
 export const mapFeatureSchema = z.object({
-  id: idSchema,
+  /** Stable across requests. Investigations use their UUID; FIRMS rows use stableId(...). */
+  id: z.string().trim().min(1).max(200),
   kind: z.enum(MAP_FEATURE_KINDS),
   location: publicLocationSchema,
   /** Set for investigations, and for anomalies or events linked to one. */
   investigationId: idSchema.nullable(),
   status: investigationStatusSchema.nullable(),
+  reviewOutcome: reviewOutcomeSchema.nullable(),
   reviewPriority: reviewPrioritySchema.nullable(),
   /** Newest evidence time for this feature, or null if unknown. */
   observedAt: timestampSchema.nullable(),
   freshness: sourceStateSchema,
   sources: z.array(sourceKindSchema).max(SOURCE_KINDS.length),
   provenance: provenanceSchema,
+  /** For thermal anomalies: the detection's details. */
+  firms: firmsEvidenceSchema.nullable().default(null),
+  /** For investigation markers: the full public summary, for lists and popups. */
+  investigation: investigationSummarySchema.nullable().default(null),
+}).superRefine((feature, ctx) => {
+  if (feature.kind === "investigation" && !humanPublicLocationSchema.safeParse(feature.location).success) {
+    ctx.addIssue({ code: "custom", path: ["location"], message: "Investigation markers use toPublicLocation()." });
+  }
 });
 export type MapFeature = z.infer<typeof mapFeatureSchema>;
 
@@ -847,63 +1339,59 @@ export const mapResponseSchema = z.object({
   truncated: z.boolean(),
   features: z.array(mapFeatureSchema).max(MAP_MAX_LIMIT),
   sourceAvailability: z.array(sourceAvailabilitySchema).max(SOURCE_KINDS.length),
+}).superRefine((response, ctx) => {
+  if (response.features.length === 0) return;
+  const synthetic = response.features.filter((feature) => feature.provenance.isSynthetic).length;
+  const expected = synthetic === response.features.length ? "synthetic" : synthetic === 0 ? "live" : "mixed";
+  if (response.mode !== expected) ctx.addIssue({ code: "custom", path: ["mode"], message: `mode must be "${expected}".` });
 });
 export type MapResponse = z.infer<typeof mapResponseSchema>;
 
+/** The right `mode` for a list of map features. */
+export function mapModeFor(features: readonly MapFeature[]): MapResponse["mode"] {
+  const synthetic = features.filter((feature) => feature.provenance.isSynthetic).length;
+  if (synthetic === features.length) return "synthetic";
+  return synthetic === 0 ? "live" : "mixed";
+}
+
 /* -------------------------------------------------------------------------- */
-/* Synthetic demonstration data                                               */
+/* Ports (types only, so they cost nothing in a browser bundle)               */
 /* -------------------------------------------------------------------------- */
 
-/** Badge text for anything with isSynthetic: true. */
-export const SYNTHETIC_DATA_LABEL = "Synthetic demo data";
+/** One source adapter (FIRMS, Open-Meteo, EONET). It never throws: a failure is an "unavailable" observation. */
+export type SourceAdapter = (input: {
+  investigationId: Id;
+  subject: { location: PublicLocation; observedAt: Timestamp; syntheticScenarioId: SyntheticScenarioId | null };
+  checkedAt: Timestamp;
+  signal?: AbortSignal;
+}) => Promise<{ observations: Observation[]; availability: SourceAvailability }>;
 
 /**
- * Shared labelled scenarios, so baseline and distributed runs use the same
- * fixtures. `groundTruth` is the label for evaluation only: never show it as
- * an agent output.
+ * How the agent runtime persists its work. Write-only, so no worker can read a
+ * peer's findings around a partition. Every method is idempotent by id or key.
+ * Mac implements it over Supabase (service role); tests use an in-memory one.
  */
-export const SYNTHETIC_SCENARIOS = [
-  { id: "corroborated-smoke", title: "Smoke report near a recent thermal anomaly", groundTruth: "fire" },
-  { id: "misleading-photo", title: "Cloud photo reported as smoke", groundTruth: "no_fire" },
-  { id: "missing-satellite-pass", title: "Credible report before any satellite pass", groundTruth: "fire" },
-  { id: "weather-timeout", title: "Weather source times out", groundTruth: "fire" },
-  { id: "repeated-witness", title: "One witness reports the same smoke twice", groundTruth: "fire" },
-  { id: "partition-recovery", title: "Agents partitioned, then reconciled", groundTruth: "fire" },
-] as const;
-export type SyntheticScenarioId = (typeof SYNTHETIC_SCENARIOS)[number]["id"];
-export const syntheticScenarioIdSchema = z.enum(
-  SYNTHETIC_SCENARIOS.map((scenario) => scenario.id) as [SyntheticScenarioId, ...SyntheticScenarioId[]],
-);
-
-/** Synthetic IDs start with this group, so they are easy to spot in logs. */
-export const SYNTHETIC_ID_PREFIX = "00000000-";
-
-/** A small, deterministic string hash (cyrb53). Not cryptographic. */
-function hash53(text: string, seed: number): number {
-  let h1 = 0xdeadbeef ^ seed;
-  let h2 = 0x41c6ce57 ^ seed;
-  for (let i = 0; i < text.length; i++) {
-    const code = text.charCodeAt(i);
-    h1 = Math.imul(h1 ^ code, 2_654_435_761);
-    h2 = Math.imul(h2 ^ code, 1_597_334_677);
-  }
-  h1 = Math.imul(h1 ^ (h1 >>> 16), 2_246_822_507) ^ Math.imul(h2 ^ (h2 >>> 13), 3_266_489_909);
-  h2 = Math.imul(h2 ^ (h2 >>> 16), 2_246_822_507) ^ Math.imul(h1 ^ (h1 >>> 13), 3_266_489_909);
-  return 4_294_967_296 * (2_097_151 & h2) + (h1 >>> 0);
+export interface EmberGapRuntimeStore {
+  appendEvents(events: AgentEvent[]): Promise<void>;
+  saveObservations(observations: Observation[]): Promise<void>;
+  saveFinding(finding: AgentFinding): Promise<void>;
+  setAutomatedStatus(
+    investigationId: Id,
+    status: (typeof AUTOMATED_INVESTIGATION_STATUSES)[number],
+    reviewPriority: ReviewPriority | null,
+  ): Promise<void>;
 }
 
 /**
- * A stable UUID for synthetic fixtures, derived from a name. Use a name that is
- * unique to you, for example "firms/corroborated-smoke/detection-1". Works in
- * the browser and in Node.
+ * The read side, used by GET /api/embergap/map and /investigations/[id]. Runs
+ * under the caller's RLS, returns "Z" timestamps, sets viewerAccess itself, and
+ * returns not_found for anything the caller may not see.
  */
-export function syntheticId(name: string): string {
-  if (name.trim() === "") throw new Error("syntheticId needs a name.");
-  const hex = (hash53(name, 1).toString(16).padStart(14, "0") + hash53(name, 2).toString(16).padStart(14, "0")).slice(0, 23);
-  const variant = ((parseInt(hex[7], 16) & 0x3) | 0x8).toString(16);
-  return `${SYNTHETIC_ID_PREFIX}${hex.slice(0, 4)}-4${hex.slice(4, 7)}-${variant}${hex.slice(8, 11)}-${hex.slice(11, 23)}`;
-}
-
-export function isSyntheticId(id: string): boolean {
-  return id.startsWith(SYNTHETIC_ID_PREFIX) && idSchema.safeParse(id).success;
+export interface InvestigationReadRepository {
+  listMapInvestigations(query: MapQuery): Promise<
+    { ok: true; data: { features: MapFeature[]; truncated: boolean } } | { ok: false; error: { kind: string; message: string } }
+  >;
+  getInvestigationDetail(
+    id: Id,
+  ): Promise<{ ok: true; data: InvestigationDetailResponse } | { ok: false; error: { kind: string; message: string } }>;
 }

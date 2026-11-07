@@ -233,6 +233,9 @@ Do not expose exact reporter locations, photo GPS EXIF or private identities thr
 
 ## API adapters and keys
 
+**Exact upstream URLs, route names, required credentials and developer assignments:** [EmberGap API ownership](embergap-api-ownership.md). This is the canonical integration checklist; do not duplicate an API owned by another teammate.
+
+
 - **NASA FIRMS**: server-only `NASA_FIRMS_MAP_KEY`; query time/bounds; preserve sensor, original coordinates, observation timestamps, retrieval timestamps and API failures. Distinguish thermal anomalies from confirmed fires.
 - **Open-Meteo**: weather and relevant observation/forecast context; preserve whether a reading is observed, modelled or forecast, with timestamps. Check free-use/licence terms before deployment.
 - **NASA EONET v3**: contextual natural-event records with their age/coverage. Do not confuse a lack of event records with a negative observation.
@@ -260,7 +263,7 @@ Before coding adapters, verify current API endpoints, auth, rate limits and resp
 - AI image interpretation is only supporting evidence; deterministic checks and human review determine how evidence is presented. Never silently convert model guesses into facts.
 - Do not infer a precise location from an image or display a reporter's exact coordinates publicly.
 - All secrets stay server-side. Respect the existing `CLAUDE.md` prohibitions on hosted resets, remote credentials, merging and direct `main` pushes.
-- Local development: `npm ci && npm run local:dev`; each developer runs their own Docker-backed local Supabase. Only the migration owner deploys to hosted after reviewed PRs.
+- Local development: `npm ci && npm run local:dev`; each developer runs their own Docker-backed local Supabase. Only the migration owner deploys to hosted after the relevant migrations are integrated and checked.
 - The default demo must work **fully offline from third-party AI/data APIs** through clearly labelled synthetic fixtures. Make live mode opt-in with honest failures, rather than fabricating API responses.
 
 ## Minimal user-testing scope
@@ -273,5 +276,5 @@ Do **one short internal walkthrough** with 1-2 available teammates, coordinated 
 - Integration: scoped report visibility, private uploads, agent findings access controls, new table grants/RLS and migration correctness on local Supabase.
 - E2E: a handful of focused browser checks: report form validation, map/evidence read path, a basic partition demo and one mobile viewport. Avoid extensive manual user research.
 - Existing commands: `npm run preflight`, `npm run validate`, `npm run local:status`, `npm run local:test`. Run targeted tests first; note anything skipped. Minimal **manual user testing** does not mean skipping CI, RLS/security tests, agent reconciliation tests or existing smoke checks.
-- PR order: **contracts and migrations -> parallel Outrolife FIRMS+GET+map, PC weather+runtime, Danil validation, d3vmakes reporting UI PRs -> Mac integration PR -> demo hardening**. Avoid cherry-picking unreviewed work across branches.
-- Owner coordinates one human approval per PR. Claude Code sessions never approve, merge or push to `main`. Existing `/feature-dev`, `/bugfix`, `/self-review` skills remain mandatory for the relevant phases.
+- PR order: **contracts and migrations -> parallel Outrolife FIRMS+GET+map, PC weather+runtime, Danil validation, d3vmakes reporting UI PRs -> Mac integration PR -> demo hardening**. Avoid cherry-picking incomplete work across branches.
+- No mandatory Claude self-review or teammate PR approval in hackathon fast-build mode. Keep focused automated tests and CI. Claude Code sessions never approve, merge or push to `main`; the human owner merges. The `/feature-dev` and `/bugfix` workflows remain available without review gates.
