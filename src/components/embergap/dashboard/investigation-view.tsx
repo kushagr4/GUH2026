@@ -107,7 +107,7 @@ export function InvestigationView({ detail }: { detail: InvestigationDetailRespo
 
       <SafetyNotice />
 
-      <AgentStrip findings={findings} />
+      <AgentStrip findings={findings} observations={observations} />
 
       <Card className={`border-l-4 ${priorityAccent(recommendation?.reviewPriority ?? investigation.reviewPriority)}`}>
         <CardHeader>

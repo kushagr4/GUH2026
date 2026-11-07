@@ -1,11 +1,27 @@
 import type { AgentEvent, AgentFinding, AgentId, Observation } from "@/lib/embergap/contracts";
 import { ACTOR_LABEL, ASSESSMENT_LABEL, ASSESSMENT_TONE, STRENGTH_LABEL, formatUtc } from "./labels";
+import { SOURCE_FEED, SourceChip, provenanceLabel } from "./data-sources";
 import { ToneBadge } from "./tone-badge";
 
 const AGENTS: AgentId[] = ["witness", "vision", "satellite", "weather", "fusion"];
 
-/** One tile per independent agent: its latest finding, or that it has not reported. */
-export function AgentStrip({ findings }: { findings: AgentFinding[] }) {
+/** What each agent reads, before it has reported. */
+const AGENT_FEED: Record<AgentId, { icon: string; label: string }> = {
+  witness: SOURCE_FEED.human,
+  vision: SOURCE_FEED.vision,
+  satellite: SOURCE_FEED.firms,
+  weather: { icon: SOURCE_FEED.weather.icon, label: "Open-Meteo + NASA EONET" },
+  fusion: { icon: "⚖", label: "The other four agents" },
+};
+
+/** The feeds behind one finding: the providers of the observations it cites. */
+function feedsFor(finding: AgentFinding, observations: Observation[]): string[] {
+  const cited = observations.filter((observation) => finding.evidenceIds.includes(observation.id));
+  return [...new Set(cited.map((observation) => provenanceLabel(observation.provenance)))];
+}
+
+/** One tile per independent agent: where its data came from, and its latest finding. */
+export function AgentStrip({ findings, observations }: { findings: AgentFinding[]; observations: Observation[] }) {
   const latest = new Map<AgentId, AgentFinding>();
   for (const finding of [...findings].sort((a, b) => a.createdAt.localeCompare(b.createdAt))) latest.set(finding.agentId, finding);
   return (
@@ -17,8 +33,15 @@ export function AgentStrip({ findings }: { findings: AgentFinding[] }) {
         {AGENTS.map((agent) => {
           const finding = latest.get(agent);
           return (
-            <li key={agent} className="flex flex-col gap-1.5 rounded-lg border bg-card px-3 py-2 text-sm">
+            <li key={agent} className="flex flex-col gap-1.5 rounded-xl border bg-card px-3 py-2.5 text-sm shadow-xs">
               <span className="font-medium">{ACTOR_LABEL[agent]}</span>
+              <SourceChip
+                icon={AGENT_FEED[agent].icon}
+                label={(finding && agent !== "fusion" && agent !== "witness" && feedsFor(finding, observations).join(", ")) || AGENT_FEED[agent].label}
+                synthetic={finding?.isSynthetic}
+                wrap
+                className="self-start"
+              />
               {finding ? (
                 <>
                   <ToneBadge tone={ASSESSMENT_TONE[finding.assessment]}>
@@ -41,13 +64,11 @@ export function AgentStrip({ findings }: { findings: AgentFinding[] }) {
 /** Where a finding's evidence came from: provider and product, and whether it is simulated. */
 export function Provenance({ finding, observations }: { finding: AgentFinding; observations: Observation[] }) {
   const cited = observations.filter((observation) => finding.evidenceIds.includes(observation.id));
-  const sources = [
-    ...new Set(cited.map((observation) => [observation.provenance.provider, observation.provenance.product].filter(Boolean).join(" · "))),
-  ];
+  const sources = [...new Set(cited.map((observation) => provenanceLabel(observation.provenance)))];
   return (
     <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
       {finding.isSynthetic ? <ToneBadge tone="neutral">Demo</ToneBadge> : null}
-      <span>Evidence: {sources.length ? sources.join("; ") : "derived from other agents' findings"}</span>
+      <span>Data from: {sources.length ? sources.join("; ") : "the other agents' findings"}</span>
     </p>
   );
 }
