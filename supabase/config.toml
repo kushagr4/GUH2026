@@ -1,12 +1,9 @@
-# Defines each developer's local Supabase, started by `npm run local:dev`
-# (docs/docker-development.md). The hosted demo project is configured in its
-# dashboard. The [auth] values reach it only if the migration owner runs
-# `supabase config push --remote`.
-#
-# For detailed configuration reference documentation, visit:
-# https://supabase.com/docs/guides/local-development/cli/config
-# A string used to distinguish different Supabase projects on the same host. Defaults to the
-# working directory name when running `supabase init`.
+# Supabase CLI configuration. EmberGap develops against the hosted project, so
+# nothing here starts a local stack: the CLI uses this file for the migration
+# owner's hosted commands (npm run db:status, db:plan, db:push, db:types). The
+# [auth] values below are the intended hosted settings; they change the hosted
+# project only if the owner deliberately runs `supabase config push`.
+# Docs: https://supabase.com/docs/guides/local-development/cli/config
 project_id = "GUH2026"
 
 [api]

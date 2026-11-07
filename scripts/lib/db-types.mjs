@@ -1,6 +1,6 @@
 /**
  * The schema part of a generated database types file, with formatting removed.
- * The hosted generator (`db:types`) and the local one (`local:types`) differ in
+ * Type generator versions differ in
  * quoting, commas, line wrapping, a `ComputedFields: never` member and the
  * `__InternalSupabase` hint, but agree on every table, column and type, which
  * is what this compares.

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Safe wrappers around the Supabase CLI for the hosted project. No command here
-// needs a container runtime, and none can reset or wipe the database. Local
-// development uses scripts/local-supabase.mjs instead.
+// needs a container runtime, and none can reset or wipe the database. Everyone
+// develops against the hosted project through .env.local (docs/supabase-cloud-development.md).
 //
 //   npm run db:new -- add_notes    Create a migration from the secure template
 //   npm run db:status              Compare local files with the hosted history
@@ -201,7 +201,7 @@ switch (command) {
     const generated = generateTypes();
     if (args.includes("--check")) {
       const current = existsSync(TYPES_FILE) ? readFileSync(TYPES_FILE, "utf8") : "";
-      // Compares the schema, not the formatting: local:types output is equally valid.
+      // Compares the schema, not the formatting, so regenerating never churns the file.
       if (schemaSignature(current) !== schemaSignature(generated)) {
         fail(`${TYPES_FILE} does not match the hosted schema. Run npm run db:types.`);
       }
