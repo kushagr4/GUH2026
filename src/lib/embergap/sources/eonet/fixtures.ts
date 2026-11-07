@@ -17,26 +17,26 @@ export const SYNTHETIC_EONET_RESPONSE: EonetResponse & { title: string; descript
   events: [
     {
       id: "EONET_990001",
-      title: "SYNTHETIC MOOR Wildfire, Demo County (SYNTHETIC)",
+      title: "SYNTHETIC NEBRODI Wildfire, Demo Province (SYNTHETIC)",
       description: "Synthetic fixture for the EmberGap demo",
       link: "https://eonet.gsfc.nasa.gov/api/v3/events/EONET_990001",
       closed: null,
       categories: [{ id: "wildfires" }],
       sources: syntheticSource,
       geometry: [
-        { magnitudeValue: 780, magnitudeUnit: "acres", date: "2026-11-06T22:10:00Z", type: "Point", coordinates: [-1.84, 53.47] },
+        { magnitudeValue: 780, magnitudeUnit: "acres", date: "2026-11-06T22:10:00Z", type: "Point", coordinates: [14.96, 37.76] },
       ],
     },
     {
       id: "EONET_990002",
-      title: "SYNTHETIC FAR Wildfire, Elsewhere County (SYNTHETIC)",
+      title: "SYNTHETIC FAR Wildfire, Elsewhere Province (SYNTHETIC)",
       description: null,
       link: "https://eonet.gsfc.nasa.gov/api/v3/events/EONET_990002",
       closed: "2026-11-03T00:00:00Z",
       categories: [{ id: "wildfires" }],
       sources: syntheticSource,
       geometry: [
-        { magnitudeValue: 2100, magnitudeUnit: "acres", date: "2026-11-01T09:00:00Z", type: "Point", coordinates: [-3.2, 51.5] },
+        { magnitudeValue: 2100, magnitudeUnit: "acres", date: "2026-11-01T09:00:00Z", type: "Point", coordinates: [12.5, 45.4] },
       ],
     },
   ],
