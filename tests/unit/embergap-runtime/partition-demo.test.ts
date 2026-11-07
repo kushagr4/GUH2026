@@ -28,7 +28,7 @@ function outcomes(result: PartitionDemoResult) {
   const findings = new Map<string, AgentFinding>(result.records!.findings.map((finding) => [finding.id, finding]));
   const out: Record<string, [string, string]> = {};
   for (const agent of result.agents) {
-    for (const task of agent.tasks) {
+    for (const task of agent.tasks.filter((item) => item.kind !== "fusion.fuse")) {
       for (const eventId of task.outputEventIds) {
         const finding = findings.get(syntheticId(`runtime/${result.runId}/${agent.agentId}/${Number(eventId.split(":").at(-1))}`));
         if (finding) out[`${task.id.split(":").slice(1).join(":")}@${task.investigationId === A ? "A" : "B"}`] = [finding.assessment, finding.reasonCodes.join("+")];
@@ -77,8 +77,24 @@ describe("the partition demonstration", () => {
     expect(recovered.blockedTasks).toEqual([]);
     expect(recovered.tasksCompleted.weather).toBe(2);
     expect(Object.values(recovered.reachability).flatMap((peers) => Object.values(peers))).toEqual(Array(12).fill("reachable"));
-    expect(result.reconciliation).toMatchObject({ isolated: ["fusion", "satellite"], completedWhileIsolated: 5 });
+    expect(result.reconciliation).toMatchObject({ isolated: ["fusion", "satellite"] });
+    // 5 source tasks, plus the fusion runs on whatever evidence reached the isolated side.
+    expect(result.reconciliation!.completedWhileIsolated).toBeGreaterThan(5);
     expect(result.reconciliation!.redelivered).toBeGreaterThan(0);
+  });
+
+  it("lets fusion decide differently while partitioned, then agree with all the evidence after the heal", async () => {
+    const [, partitioned, recovered] = (await runPartitionDemo()).phases;
+    // Investigation B arrived during the partition: fusion, cut off with the
+    // satellite, saw only the satellite's finding and not weather or vision.
+    const during = partitioned.fusion[B]!;
+    const after = recovered.fusion[B]!;
+    expect(during.sourceFindings).toBe(1);
+    expect(after.sourceFindings).toBe(5);
+    expect(during.gaps.length).toBeGreaterThan(after.gaps.length);
+    expect(after.independentSourceCount).toBeGreaterThan(during.independentSourceCount);
+    // Investigation A: fusion already had the connected phase's evidence, then the new pass.
+    expect(recovered.fusion[A]!.sourceFindings).toBe(7);
   });
 
   it("writes canonical, synthetic records and the partition facts the timeline needs", async () => {
@@ -87,14 +103,20 @@ describe("the partition demonstration", () => {
     for (const observation of observations) expect(observationSchema.parse(observation).provenance.isSynthetic).toBe(true);
     for (const finding of findings) expect(agentFindingSchema.parse(finding).isSynthetic).toBe(true);
     for (const event of events) agentEventSchema.parse(event);
-    expect(findings).toHaveLength(12);
+    const sourceFindings = findings.filter((finding) => finding.agentId !== "fusion");
+    const fusionFindings = findings.filter((finding) => finding.agentId === "fusion");
+    expect(sourceFindings).toHaveLength(12);
+    expect(fusionFindings.length).toBeGreaterThanOrEqual(4);
+    for (const finding of fusionFindings) expect(finding).toMatchObject({ assessment: "context", strength: null, recommendation: expect.any(Object) });
     const types = events.map((event) => event.type);
-    expect(types.filter((type) => type === "finding_recorded")).toHaveLength(12);
+    expect(types.filter((type) => type === "finding_recorded")).toHaveLength(findings.length);
     expect(types.filter((type) => type === "partition_started")).toHaveLength(1);
     expect(types.filter((type) => type === "partition_healed")).toHaveLength(2);
     const reconciled = events.filter((event) => event.type === "reconciled");
     expect(reconciled.map((event) => event.investigationId).sort()).toEqual([A, B].sort());
-    expect(reconciledEventDetailsSchema.parse(reconciled[0].details)).toMatchObject({ isolated: ["fusion", "satellite"], completedWhileIsolated: 5 });
+    const details = reconciledEventDetailsSchema.parse(reconciled[0].details);
+    expect(details.isolated).toEqual(["fusion", "satellite"]);
+    expect(details.completedWhileIsolated).toBeGreaterThan(5);
     // Nothing private or internal in what investigators would see.
     expect(JSON.stringify(result)).not.toMatch(/secret|stack|Error:/);
   });

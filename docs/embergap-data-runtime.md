@@ -38,7 +38,67 @@ const eonet = await createEonetSourceAdapter()({ investigationId, subject, check
 - **Processors** are the plug-in point. They are synchronous and pure, so all I/O happens before a task is enqueued, and they return canonical observations plus finding drafts. The runtime adds ids, attribution and time, then validates everything with `observationSchema` and `agentFindingSchema`. The contract's scientific rules hold for anything that replicates.
 - **Persistence:** each agent writes its own records through `EmberGapRuntimeStore`. The driver, as the contract's `system` endpoint, records `partition_started`, `partition_healed` and `reconciled` (with `redelivered`, `duplicatesIgnored` and `completedWhileIsolated`) for each in-flight investigation.
 
-## Invoking it from the deployed Next.js backend (Claude Mac)
+## Running agents on a real investigation (Claude Mac)
+
+Import everything from `@/lib/embergap/agents/runtime` (server-only).
+
+### One line in the orchestrator
+
+`createRuntimeInvestigationRunner()` has exactly the shape of `InvestigationRunner` in `src/features/embergap/orchestrator.ts`, so it plugs straight in:
+
+```ts
+import { createRuntimeInvestigationRunner } from "@/lib/embergap/agents/runtime";
+
+scheduleInvestigation(investigation.id, createRuntimeInvestigationRunner());
+```
+
+1. **Gather.** It fetches inputs first, in parallel and bounded by `run.signal`: Open-Meteo and EONET through the `SourceAdapter`s, and FIRMS through Outrolife's `getThermalAnomalies`, which uses its own demo or live mode, turned into observations with `firmsObservationsFor`.
+2. **Run.** It runs the five agents on those prepared inputs.
+3. **Write.** Through `run.store` it saves:
+   - observations, findings and fusion recommendations
+   - `task_queued`, `finding_recorded` and `message_delivered` (evidence sharing) events
+   - the automated status, from the latest fusion recommendation
+
+The run id comes from `run.newId(...)`, so a retried run rewrites the same rows, and a later report starts a fresh run.
+
+### Optional inputs
+
+Witness and vision results are Danil's and are fetched outside the runtime, so they're optional providers:
+
+```ts
+createRuntimeInvestigationRunner({
+  // Danil's witness findings, canonical. For example, his runValidationPipeline output through
+  // your toCanonicalFinding (export toWitnessReport from orchestrator.ts to reuse it).
+  witnessFindings: async (run) => canonicalWitnessFindings(run),
+  // Model output already fetched for the photo: { mediaId, reportObservedAt, labels, smokeLike, modelOutput, model }.
+  vision: async (run) => null,
+  // Show a simulated partition inside this run (the demo button).
+  simulatePartition: true,
+});
+```
+
+### Calling the runtime directly
+
+`runInvestigationAgents(input)` is the entry point underneath. It makes no network requests.
+
+| Input | Type |
+| --- | --- |
+| `investigationId`, `runId`, `startedAt` | ids and the time of simulated 0 |
+| `mode` | `"synthetic"` or `"live"`. A live run drops synthetic inputs and counts them in `rejectedInputs` |
+| `reports` | `{ id, observedAt, hasMedia }[]`. Report text and location never enter the runtime |
+| `observations` | canonical `Observation[]` from weather, eonet and firms |
+| `sourceAvailability` | `SourceAvailability[]`. A source with no observations becomes `not_observed` or `unavailable`, never negative |
+| `witnessFindings` | canonical witness `AgentFinding[]` |
+| `vision` | `DanilVisionInput` or null |
+| `store` | `EmberGapRuntimeStore` |
+| `signal`, `budgetMs` | cancellation, and a real-time budget for the simulation (default 10 s; it needs about 0.1 s) |
+| `partition`, `link`, `seed` | an optional simulated partition, and network faults |
+
+It returns `{ stopReason, settled, converged, tasks, findings, recommendation, reconciliation, evidenceSharing, historyHashes, rejectedInputs }`, where `stopReason` is `settled`, `budget`, `cancelled` or `max-time`.
+
+**Tasks it dispatches, one agent each:** weather observations to `weather.observations`, EONET to `eonet.observations` (both on the `weather` agent), FIRMS to `satellite.observations`, witness findings to `witness.findings`, and vision to Danil's `vision.assess`. Danil's `fusion.fuse` runs once per distinct evidence set, as findings reach the fusion agent.
+
+## Invoking the demo from the deployed Next.js backend (Claude Mac)
 
 A run is one short call: the demo takes about 0.1 s of wall time for about 14 s of simulated time, and returns about 50 KB of JSON. Run it from trusted server code with the service-role store. Don't add a public, unauthenticated route (see `docs/embergap-api-ownership.md`).
 
@@ -59,6 +119,19 @@ export async function runEmbergapPartitionDemo() {
 - **Records** land on the seeded synthetic investigations `partition-recovery` and `weather-timeout`, so they appear in the existing read APIs next to the seeded demo data.
 - **Step-by-step display without stored agent state:** `runPartitionDemo({ seed, runId, stopAtMs })` replays deterministically to any simulated time, so each request recomputes the same state. Alternatively, return the full result once and let the UI animate its `phases` and `timeline`.
 - **Real investigations:** fetch context on the server with `getOpenMeteo().getWeatherContext(...)` and `getEonet().getWildfireContext(...)`. Then enqueue `weather.context` (`{ context }`) and `eonet.context` (`{ context, timeOfInterest }`) on a `weather` agent from `createDemoAgents({ runId, store, mode: "live" })`, and drive it with `createSimulation`. Live mode refuses synthetic stand-ins and synthetic records.
+
+### What the partition demo shows
+
+The demo uses Danil's vision validator and fusion by default. Each phase summary includes `fusion`: the latest recommendation the fusion agent made from the evidence that had reached it.
+
+For the weather-timeout investigation, which arrives during the partition, the fusion agent first sees only the satellite's finding:
+
+| Phase | Fusion's view |
+| --- | --- |
+| Partitioned | `investigating`, low priority: 1 independent source, 1 finding, 3 gaps |
+| After the heal | `needs_human_review`, medium priority: 2 sources, 5 findings, 2 gaps |
+
+The run takes about 0.2 s and returns about 73 KB. It reports 40 events redelivered across the old cut, 318 duplicates ignored and 7 tasks finished while partitioned.
 
 ## Plugging in validators and fusion (Danil)
 
@@ -82,6 +155,6 @@ runPartitionDemo({
 
 - **One process.** It's a simulation: agents are logically isolated objects in one process, with no shared references (every boundary is a JSON copy). They aren't separate machines, and nothing here is production-grade distributed infrastructure.
 - **Authentication and conflicts.** Agents don't authenticate each other cryptographically. Conflict detection catches divergent copies, and the canonical copy converges deterministically, but spreading the conflict record to every replica is best effort.
-- **Stand-ins.** The satellite and vision agents run labelled synthetic stand-ins. Live satellite data needs Outrolife's FIRMS output as task input; live vision needs Danil's validator.
+- **Stand-ins.** In the partition demo the satellite agent runs a labelled synthetic stand-in, and vision runs Danil's validator on his labelled fixtures. Real investigations take real FIRMS observations through `satellite.observations`, and live vision needs model output fetched before the run.
 - **Heuristics.** Weather thresholds (humidity under 30%, wind of 25 km/h or more, 2 mm of rain in 24 hours) are uncalibrated descriptions, never a fire verdict.
 - **No baseline.** No centralised baseline was measured, so this makes no improvement claims.

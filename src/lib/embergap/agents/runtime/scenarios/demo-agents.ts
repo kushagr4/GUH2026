@@ -58,7 +58,7 @@ function describeConditions(evidence: NonNullable<Extract<Observation, { source:
 }
 
 /** The weather agent's reading of one weather observation: context, never proof. */
-function weatherFinding(observation: Observation, lead: string): FindingDraft {
+export function weatherFinding(observation: Observation, lead: string): FindingDraft {
   const base = {
     strength: null,
     evidenceIds: [observation.id],
