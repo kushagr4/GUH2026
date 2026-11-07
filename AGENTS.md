@@ -10,18 +10,18 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## Workflow, for every coding agent
 
-Follow `CLAUDE.md` and `docs/development-workflow.md`. Work on a branch and open a draft pull request. Never merge or approve a pull request, and never push to `main`: one human approval is required before merging.
+Follow `CLAUDE.md` and `docs/development-workflow.md`. Work on an owned feature branch and open a non-draft PR. No Claude self-review or human approval is required. Claude must not merge, approve or push to `main`; the human owner merges.
 
 
 ---
 
 ## EmberGap contributor and AI-agent instructions
 
-This file governs **coding assistants** working in the GUH2026 repository, in addition to the existing Next.js and review rules above. **Do not confuse these developer roles with the runtime wildfire-evidence agents.** Read `CLAUDE.md` and the EmberGap section of `docs/architecture.md` before editing product code. Existing instructions and deny hooks remain in force.
+This file governs **coding assistants** working in the GUH2026 repository, in addition to the existing Next.js and fast-build workflow rules above. **Do not confuse these developer roles with the runtime wildfire-evidence agents.** Read `CLAUDE.md` and the EmberGap section of `docs/architecture.md` before editing product code. Existing instructions and deny hooks remain in force.
 
 ### Five named sessions, strict API and UI ownership
 
-The only contributors are **Claude Mac**, **Claude PC**, **Danil**, **Outrolife** and **d3vmakes**. Use separate branches and local Docker databases. There is no separate Developer A or C. Read `docs/architecture.md` for the authoritative paths, interfaces and merge order.
+The only contributors are **Claude Mac**, **Claude PC**, **Danil**, **Outrolife** and **d3vmakes**. Use separate branches and local Docker databases. There is no separate Developer A or C. Read `docs/architecture.md` for the authoritative paths, interfaces and merge order, and `docs/embergap-api-ownership.md` for exact upstream APIs, internal routes, environment keys and names.
 
 | Role / branch | Own files and APIs | Deliverable |
 | --- | --- | --- |
@@ -41,7 +41,7 @@ The only contributors are **Claude Mac**, **Claude PC**, **Danil**, **Outrolife*
 
 - Feature or refactor: `.claude/skills/feature-dev/SKILL.md`; examine similar feature and add contract-level tests.
 - Bug or failed integration: `.claude/skills/bugfix/SKILL.md`; reproduce with a failing test first.
-- PR handoff and code review: `.claude/skills/self-review/SKILL.md`; run real preflight, then get a separate human reviewer.
+- PR handoff: run focused checks, commit, push and open a normal PR. Do not run `/self-review`, `/code-review` or spawn review agents unless explicitly requested.
 - Database changes: `docs/team-workflow.md`, `docs/docker-development.md`, `docs/architecture.md`; migrations only, local tests before owner's hosted rollout.
 - Third-party data: `docs/integrations.md`; official API docs, retries/timeouts, honest source freshness, no live network in unit tests.
 - Security audit: `docs/ci-and-reviews.md`; RLS, private storage, secrets scan and client-bundle scan.
@@ -70,6 +70,6 @@ Use labelled synthetic scenarios as ground truth for evaluation. Baseline and di
 
 ### Branch, verification and merge rules
 
-Before writing: `git status`, confirm correct branch and ownership, read shared types, note pending PR dependencies. After changes: targeted unit tests, `npm run preflight`, `npm run local:test` for DB/API journeys, focused browser smoke checks where applicable, and `/self-review`. Keep manual user testing to the agreed short internal walkthrough. Use Conventional Commits and a **draft PR**. Request one reviewer who did not author the change; the human owner/reviewer, not a coding agent, performs squash merge. The reviewer gate on a private Free repo is **advisory**, not technically enforced; never claim otherwise. Report unsupported checks and synthetic/live modes explicitly.
+Before writing: `git status`, confirm branch and ownership, read shared contracts. After changes: targeted unit tests, `npm run typecheck`, `npm run lint` and `npm run preflight` when feasible; run `npm run local:test` for affected DB/API journeys. Keep manual user testing to the short internal demo walkthrough. Use Conventional Commits and **normal PRs**. **No Claude review, review agent, self-review marker, or required teammate approval.** The human repo owner merges when ready; Claude never merges, approves or pushes to `main`. State any checks that were skipped. Preserve CI, auth, RLS, secrets and database-safety protections.
 
 Avoid destructive database resets, Docker-volume deletion, bulk worktree cleaning or any alteration of another contributor's working tree without their explicit approval.
