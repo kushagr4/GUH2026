@@ -4,14 +4,14 @@
  * reconciliation; these processors only turn a task plus the agent's LOCAL
  * evidence into canonical findings (`@/lib/embergap/contracts`).
  *
- * - `danilVisionProcessor` ("vision.assess") replaces the runtime's synthetic
+ * - `visionValidatorProcessor` ("vision.assess") replaces the runtime's synthetic
  *   `visionStandIn`. It runs Danil's guardrails (`toVisionFinding`) on model
  *   output that the SERVER fetched before enqueueing, or on a labelled
  *   synthetic fixture.
- * - `danilFusionProcessor` ("fusion.fuse") runs `fuseFindings` over the
+ * - `fusionProcessor` ("fusion.fuse") runs `fuseFindings` over the
  *   findings the fusion agent itself holds, so during a partition it decides
  *   with what has reached it, and re-runs as gossip delivers more.
- * - `danilFusionOnEvidence` enqueues one fusion task per distinct evidence set.
+ * - `fusionOnEvidence` enqueues one fusion task per distinct evidence set.
  *
  * Processor rules (runtime/processors.ts): synchronous and pure, no I/O, never
  * invent missing evidence. Output is decision support for human review only.
@@ -100,7 +100,7 @@ const FIXTURE_KEYS = new Set(Object.keys(VISION_FIXTURES));
 /** Synthetic-mode fallback when a stand-in style task carries no model output. */
 const SYNTHETIC_FALLBACK = { smokeLike: "fixture:vision/clear-smoke-column", unclear: "fixture:vision/blurry-image" } as const;
 
-export const danilVisionInputSchema = z.object({
+export const visionTaskInputSchema = z.object({
   mediaId: idSchema,
   reportObservedAt: timestampSchema,
   labels: z.array(z.string().min(1).max(100)).max(30),
@@ -113,11 +113,11 @@ export const danilVisionInputSchema = z.object({
   /** Model name for provenance, e.g. the Claude model id. */
   model: z.string().trim().min(1).max(100).optional(),
 });
-export type DanilVisionInput = z.infer<typeof danilVisionInputSchema>;
+export type VisionTaskInput = z.infer<typeof visionTaskInputSchema>;
 
 type ResolvedOutput = { raw: unknown; fixture: string | null };
 
-function resolveModelOutput(input: DanilVisionInput, mode: RuntimeMode): ResolvedOutput {
+function resolveModelOutput(input: VisionTaskInput, mode: RuntimeMode): ResolvedOutput {
   const { modelOutput } = input;
   if (typeof modelOutput === "string") {
     // Fixture keys are synthetic: a live run never resolves one, so it is invalid output.
@@ -164,9 +164,9 @@ export function toCanonicalVisionDraft(finding: AgentFinding, options: { isSynth
  * where a task without `modelOutput` uses the labelled fixture matching
  * `smokeLike`, so the runtime demo's existing tasks keep working.
  */
-export const danilVisionProcessor = defineProcessor({
+export const visionValidatorProcessor = defineProcessor({
   kind: "vision.assess",
-  input: danilVisionInputSchema,
+  input: visionTaskInputSchema,
   run({ task, input, nowIso, mode }) {
     const { raw, fixture } = resolveModelOutput(input, mode);
     const isSynthetic = mode === "synthetic" || fixture !== null;
@@ -232,7 +232,7 @@ function fusionExplanation(rec: FusionRecommendation, considered: number): strin
   return parts.join(" ");
 }
 
-export const danilFusionInputSchema = z.object({
+export const fusionTaskInputSchema = z.object({
   /** Hash of the evidence set that triggered this run, for audit. Fusion reads evidence locally. */
   evidenceKey: z.string().regex(/^[0-9a-f]{16}$/).optional(),
 });
@@ -242,9 +242,9 @@ export const danilFusionInputSchema = z.object({
  * investigation and returns ONE fusion finding: assessment "context",
  * strength null, with the canonical recommendation.
  */
-export const danilFusionProcessor = defineProcessor({
+export const fusionProcessor = defineProcessor({
   kind: "fusion.fuse",
-  input: danilFusionInputSchema,
+  input: fusionTaskInputSchema,
   run({ task, evidence, nowIso, mode }) {
     const held = evidence.findings({ investigationId: task.investigationId }).filter((f) => f.agentId !== "fusion");
     const rec = fuseFindings(
@@ -282,7 +282,7 @@ export function evidenceKey(findingIds: Iterable<string>): string {
  * each evidence set fuses exactly once and the agent's own fusion finding
  * (excluded from the key) never re-triggers it.
  */
-export const danilFusionOnEvidence: EvidenceHook = ({ evidence, newEvents }) => {
+export const fusionOnEvidence: EvidenceHook = ({ evidence, newEvents }) => {
   const touched = [
     ...new Set(
       newEvents
@@ -302,10 +302,10 @@ export const danilFusionOnEvidence: EvidenceHook = ({ evidence, newEvents }) => 
 };
 
 /** Pass to `runPartitionDemo` / `createDemoAgents` as `processors`. */
-export const DANIL_PROCESSORS: { vision: readonly TaskProcessor<never>[]; fusion: readonly TaskProcessor<never>[] } = {
-  vision: [danilVisionProcessor] as unknown as TaskProcessor<never>[],
-  fusion: [danilFusionProcessor] as unknown as TaskProcessor<never>[],
+export const VALIDATION_PROCESSORS: { vision: readonly TaskProcessor<never>[]; fusion: readonly TaskProcessor<never>[] } = {
+  vision: [visionValidatorProcessor] as unknown as TaskProcessor<never>[],
+  fusion: [fusionProcessor] as unknown as TaskProcessor<never>[],
 };
 
 /** Pass to `runPartitionDemo` / `createDemoAgents` as `onEvidence`. */
-export const DANIL_ON_EVIDENCE: { fusion: EvidenceHook } = { fusion: danilFusionOnEvidence };
+export const VALIDATION_ON_EVIDENCE: { fusion: EvidenceHook } = { fusion: fusionOnEvidence };
