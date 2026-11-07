@@ -19,19 +19,23 @@ Follow `CLAUDE.md` and `docs/development-workflow.md`. Work on a branch and open
 
 This file governs **coding assistants** working in the GUH2026 repository, in addition to the existing Next.js and review rules above. **Do not confuse these developer roles with the runtime wildfire-evidence agents.** Read `CLAUDE.md` and the EmberGap section of `docs/architecture.md` before editing product code. Existing instructions and deny hooks remain in force.
 
-### Session ownership
+### Five named sessions, strict API and UI ownership
 
-Choose **one** session role, check the branch and git status, and make changes only within that workstream's primary paths. Do not create conflicting branch edits on Mac and PC. All five contributors use independent checkouts/branches and independent Docker-backed Supabase databases.
+The only contributors are **Claude Mac**, **Claude PC**, **Danil**, **Outrolife** and **d3vmakes**. Use separate branches and local Docker databases. There is no separate Developer A or C. Read `docs/architecture.md` for the authoritative paths, interfaces and merge order.
 
-| Session role | Allowed primary area | Required handoff |
+| Role / branch | Own files and APIs | Deliverable |
 | --- | --- | --- |
-| **Claude Mac / core** | `src/lib/embergap/contracts.ts`, `src/features/embergap/**`, `src/app/api/embergap/**`, `supabase/migrations/**`, generated DB types | Publish immutable reviewed contracts and secure API/storage behavior first |
-| **Claude PC / data** | `src/lib/embergap/sources/**` and source-specific tests | FIRMS/weather/EONET normalized evidence, fixtures, missing-data semantics and Windows test results |
-| **Human engineer A / runtime** | `src/lib/embergap/agents/runtime/**` and runtime tests | Independent queues, message IDs, partitions, at-least-once/retry behavior and idempotent reconciliation |
-| **Human engineer B / validation** | `src/lib/embergap/agents/validators/**`, `src/lib/embergap/agents/fusion/**` and tests | Structured vision, witness duplicates, contradictions, uncertainty and traceable findings |
-| **Human engineer C / UI+QA** | `src/components/embergap/**`, `src/app/app/embergap/**`, `e2e/embergap*.spec.ts` | Responsive and accessible UI, report path, evidence inspection, synthetic demos and QA notes |
+| **Claude Mac / `feat/embergap-core`** | `src/lib/embergap/contracts.ts`, `src/features/embergap/**`, additive `supabase/migrations/**`, Supabase types, **POST `src/app/api/embergap/reports/route.ts`** and private photo storage | Canonical schemas plus secure authenticated report creation; integration ownership |
+| **Claude PC / `feat/embergap-data-runtime`** | `src/lib/embergap/sources/weather*`, `src/lib/embergap/sources/eonet*`, `src/lib/embergap/agents/runtime/**`, corresponding tests | Open-Meteo/EONET provenance, worker isolation, message transport, partition recovery |
+| **Danil / `feat/embergap-validation`** | `src/lib/embergap/agents/validators/**`, `src/lib/embergap/agents/fusion/**`, corresponding tests | Vision/witness assessment, evidence fusion and explainable uncertainty |
+| **Outrolife / `feat/embergap-map-api`** | `src/lib/embergap/sources/firms/**`, **GET `src/app/api/embergap/map/route.ts`**, **GET `src/app/api/embergap/investigations/[id]/route.ts`**, `src/components/embergap/map/**`, `src/components/embergap/dashboard/**`, `src/app/app/embergap/page.tsx`, investigation views | **NASA FIRMS API plus map/investigation read APIs and frontend**; usable with synthetic fixture data from the first commit |
+| **d3vmakes / `feat/embergap-report-ui`** | `src/components/embergap/report/**`, `src/app/app/embergap/report/**`, `e2e/embergap-report*.spec.ts` | Citizen-report form, safe-location/photo UX, error states, a few UI smoke tests, short internal QA walkthrough |
 
-The ownership table is **a coordination rule, not a permissions bypass**. Shared `package.json`, `src/config/site.ts`, `src/proxy.ts`, CI, `CLAUDE.md`, `AGENTS.md` and schema/contracts changes require approval and one integration owner. Teammates must not simultaneously modify these files.
+**No overlap:** Outrolife does **not** own POST report submission, database migrations or Open-Meteo/EONET. Mac does **not** own Outrolife's GET routes or map implementation. d3vmakes does **not** own the report backend. PC does **not** implement FIRMS. Danil does **not** write the agent transport. Shared `package.json`, navigation, layouts, contracts and migrations are Mac-owned integration files. Ask first if an API contract or shared file needs changing.
+
+**First action by all contributors:** read the contract plan, then start in parallel. Mac creates the contracts PR; Outrolife builds FIRMS fixtures and working GET routes/map with mock data before the DB is ready; d3vmakes builds the report form against a mock API; PC builds adapter/runtime fixtures; Danil builds pure validators using fixture inputs. Do not block UI progress on the integration branch. Reconcile to Mac's canonical schemas when merged.
+
+**Testing policy:** minimal **human** user testing only (one 10-15 minute internal walkthrough, 1-2 teammates, led by d3vmakes), no interviews/surveys/research artefacts. Retain automated unit, integration, RLS/security, agent partition/reconciliation, CI/preflight and focused browser smoke checks. No claim of successful tests unless actually executed.
 
 ### Project-specific developer skills (load by task)
 
@@ -66,6 +70,6 @@ Use labelled synthetic scenarios as ground truth for evaluation. Baseline and di
 
 ### Branch, verification and merge rules
 
-Before writing: `git status`, confirm correct branch and ownership, read shared types, note pending PR dependencies. After changes: targeted unit tests, `npm run preflight`, `npm run local:test` for DB/UI journeys, real browser QA when applicable, and `/self-review`. Use Conventional Commits and a **draft PR**. Request one reviewer who did not author the change; the human owner/reviewer, not a coding agent, performs squash merge. The reviewer gate on a private Free repo is **advisory**, not technically enforced; never claim otherwise. Report unsupported checks and synthetic/live modes explicitly.
+Before writing: `git status`, confirm correct branch and ownership, read shared types, note pending PR dependencies. After changes: targeted unit tests, `npm run preflight`, `npm run local:test` for DB/API journeys, focused browser smoke checks where applicable, and `/self-review`. Keep manual user testing to the agreed short internal walkthrough. Use Conventional Commits and a **draft PR**. Request one reviewer who did not author the change; the human owner/reviewer, not a coding agent, performs squash merge. The reviewer gate on a private Free repo is **advisory**, not technically enforced; never claim otherwise. Report unsupported checks and synthetic/live modes explicitly.
 
 Avoid destructive database resets, Docker-volume deletion, bulk worktree cleaning or any alteration of another contributor's working tree without their explicit approval.
