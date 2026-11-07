@@ -119,7 +119,7 @@ EmberGap is an **investigative wildfire-evidence coordination prototype**, not a
 ## Logical components and ownership
 
 ```text
-Browser (Developer C: UI/QA)
+Browser (Outrolife + d3vmakes: UI, lightweight QA)
   report form | interactive map | evidence drawer | agent/network timeline
        | authenticated, validated, rate-limited app interfaces
        v
@@ -129,12 +129,12 @@ Next.js app (Claude Mac: core integration)
   Supabase Auth + Postgres RLS + private Storage + Realtime
        | versioned task/outbox events
        v
-Agent runtime (Developer A: messaging / isolation)
+Agent runtime (Claude PC: messaging / isolation)
   independent queues, state, decisions and message transport
        |                  |                          |
        v                  v                          v
 NASA / weather adapters   Vision/witness validators    Evidence-fusion worker
-(Claude PC)               (Developer B)                (Developer B)
+(Outrolife: FIRMS)        (Danil)                      (Danil)
 FIRMS, Open-Meteo,        Claude Vision, independent    evidence audit,
 EONET, fixtures           report clustering            contradictions, status
        \____________________|__________________________/
@@ -148,15 +148,39 @@ EONET, fixtures           report clustering            contradictions, status
 
 For the hackathon, isolated Node.js workers with in-memory local queues and a controlled message bus are sufficient; a multi-machine or production-grade peer-to-peer network is **not** required. Describe the work honestly as a partitionable distributed-agent **simulation**, not as a deployed resilient emergency infrastructure system.
 
-## Proposed file boundaries (new, not yet implemented)
+## Five-contributor work split: definitive ownership
 
-| Owner | Primary owned paths | Contract with other workstreams |
+Five working sessions in total: **Claude on Mac**, **Claude on PC**, **Danil**, **Outrolife**, and **d3vmakes**. There is no separate Developer A or Developer C. The Mac and PC Claude sessions are separate contributors with separate branches. Keep filenames and responsibilities exclusive so everyone can start now.
+
+| Owner / branch | Owns | Must not edit without coordination |
 | --- | --- | --- |
-| Claude Mac / integrator | `src/lib/embergap/contracts.ts`, `src/features/embergap/**`, `src/app/api/embergap/**`, additive `supabase/migrations/**`, `src/lib/supabase/types*` | Publishes shared types, secure reporting API and persistence. **Only this owner edits shared contracts, migrations and DB types.** |
-| Claude PC / external data | `src/lib/embergap/sources/**`, `tests/unit/embergap-sources/**` | Implements `ObservationSource` adapters and deterministic fixtures; does not change migrations, contracts or `.env.local` for others. |
-| Developer A / agent runtime | `src/lib/embergap/agents/runtime/**`, `tests/unit/embergap-runtime/**` | Own queues, worker lifecycle, transport, disconnections, event deduplication and reconciliation. |
-| Developer B / AI and fusion | `src/lib/embergap/agents/validators/**`, `src/lib/embergap/agents/fusion/**`, corresponding unit tests | Validation findings, duplicate-witness safeguards, evidence-fusion rules, Claude Vision adapter. Integrate through the runtime interface, not direct DB writes. |
-| Developer C / UI and QA | `src/components/embergap/**`, `src/app/app/embergap/**`, `e2e/embergap*.spec.ts` | Build UI against contract-compliant fixtures first, then wire to reviewed endpoints. Request approval before changing shared navigation or layout. |
+| **Claude Mac**, `feat/embergap-core` | Shared Zod/TypeScript contracts at `src/lib/embergap/contracts.ts`; additive `supabase/migrations/**`; generated Supabase types; secure `POST /api/embergap/reports`; private photo upload/report storage; report and investigation repositories under `src/features/embergap/**`; final integration and shared navigation | Outrolife's GET routes/map components, PC's sources/runtime, Danil's validators, d3vmakes' form |
+| **Claude PC**, `feat/embergap-data-runtime` | Open-Meteo and EONET adapters under `src/lib/embergap/sources/weather*` and `eonet*`; independent agent execution, local state, message queues, partition simulator and idempotent reconciliation under `src/lib/embergap/agents/runtime/**`; fixtures and unit tests | FIRMS (Outrolife), contracts/migrations (Mac), evidence fusion (Danil) |
+| **Danil**, `feat/embergap-validation` | Claude Vision and witness validation in `src/lib/embergap/agents/validators/**`; deterministic fusion, provenance/uncertainty, review-priority recommendation in `src/lib/embergap/agents/fusion/**`; focused unit tests | Shared contracts, Supabase migrations, data adapters, frontend |
+| **Outrolife**, `feat/embergap-map-api` | **NASA FIRMS integration** in `src/lib/embergap/sources/firms/**`; **GET /api/embergap/map` and `GET /api/embergap/investigations/[id]`** (read-only, safe/authorised data); map/dashboard/investigation UI at `src/components/embergap/map/**`, `src/components/embergap/dashboard/**`, `src/app/app/embergap/page.tsx`, `src/app/app/embergap/investigations/**`; mock data and targeted tests | POST report API, report UI, DB/migrations, other sources/agent runtime |
+| **d3vmakes**, `feat/embergap-report-ui` | Report flow UI at `src/components/embergap/report/**`, `src/app/app/embergap/report/**`; report-form validation, safe-location copy, loading/error states; a few targeted Playwright tests in `e2e/embergap-report*.spec.ts`; short internal smoke walkthrough | Mac's POST route and storage implementation, Outrolife's map/read routes, shared contracts |
+
+### API responsibility, no overlap
+
+| Endpoint / adapter | Owner | Source of truth and behavior |
+| --- | --- | --- |
+| `POST /api/embergap/reports` and private photo upload plumbing | **Claude Mac** | Authenticated, Zod-validated writes; rate limits, server-side authorisation, RLS and privacy. Returns report ID + investigation ID + status. |
+| `GET /api/embergap/map` | **Outrolife** | Paginated/viewport-bounded safe map projection. Use **synthetic fixtures first**; later read via Mac's repository interface. Never include exact private reporter coordinates or private photos. |
+| `GET /api/embergap/investigations/[id]` | **Outrolife** | Authenticated and authorised read-only projection including source-attributed findings, timestamps and gaps. Call Mac's repository functions. Do not bypass RLS or use a privileged client. |
+| FIRMS adapter | **Outrolife** | Normalise real thermal anomalies with observedAt/retrievedAt/sourceState, API failure and satellite gaps; server-side key only. |
+| Open-Meteo + EONET adapters | **Claude PC** | Normalise forecast/observed conditions and curated events with freshness/provenance; no fake negative evidence. |
+| Vision + witness + fusion | **Danil** | Return typed findings, not unverified fire confirmations. |
+| Message transport, worker scheduling and reconciliation | **Claude PC** | Queue events with IDs; disconnected workers continue local tasks; recombine without double-processing. |
+
+**First handoff:** Mac creates a small contracts PR defining the canonical shared types and typed repository interfaces. Until that lands, **Outrolife starts immediately** using a local `src/lib/embergap/sources/firms/fixtures.ts` and fixture-driven map/read route with a clearly labelled DEMO mode; d3vmakes starts the reporting UI with mock submit responses; Danil starts validators with mock `AgentFinding`; PC starts weather/EONET fixtures and worker message bus. After contracts merge, adapt imports and responses; do not create competing copies of contract types.
+
+**Outrolife map API contract:** `GET /api/embergap/map?bbox=minLon,minLat,maxLon,maxLat&limit=50` returns a validated, bounded list of synthetic or authorised **public-safe** map features, each with ID, approximate location, type, evidence freshness, review status and provenance. Support deterministic fixture mode by default. `GET /api/embergap/investigations/[id]` returns only an investigation the caller is authorised to access, with its evidence findings and uncertainty, or 404. Clarify names in shared contracts with Mac before final integration. Neither GET route performs privileged writes, runs analysis or directly calls Anthropic. FIRMS API requests remain server-side.
+
+**d3vmakes report UI contract:** collect an approximate selected map location, observation time, description and optional private image; POST via Mac's authenticated endpoint only after it is ready. Until then mock the response locally. Display a clear emergency-services message. Do not ask users to approach fires.
+
+**Integration rule:** Mac owns shared `src/config/site.ts`, root layout/navigation, contract changes and all migrations. Outrolife and d3vmakes own separate page/component trees. If a shared file must change, request a tiny integration PR/patch rather than both branches editing it.
+
+
 
 Paths are **proposed ownership conventions**, not an instruction to create every directory immediately. Keep existing repo architecture: thin routes in `src/app`, features in `src/features`, reusable UI in `src/components`, external integration calls through the existing `createApiClient`, and schema truth in SQL migrations. Preserve current `src/lib/ai` provider interface for AI usage.
 
@@ -239,11 +263,15 @@ Before coding adapters, verify current API endpoints, auth, rate limits and resp
 - Local development: `npm ci && npm run local:dev`; each developer runs their own Docker-backed local Supabase. Only the migration owner deploys to hosted after reviewed PRs.
 - The default demo must work **fully offline from third-party AI/data APIs** through clearly labelled synthetic fixtures. Make live mode opt-in with honest failures, rather than fabricating API responses.
 
+## Minimal user-testing scope
+
+Do **one short internal walkthrough** with 1-2 available teammates, coordinated by d3vmakes: submit a synthetic report, find the resulting map/investigation entry, read one agent finding and watch a network partition/recovery. Record and fix only blocking UX issues. No formal studies, external participant recruitment, surveys, A/B tests or lengthy research reports. Automated tests and the existing CI/security checks remain mandatory.
+
 ## Test and delivery checklist
 
 - Unit tests: light-curve is not relevant; test observation normalization, duplicate detection, task arbitration, bad/stale/missing sources, agent state, partition recovery and merge idempotency.
 - Integration: scoped report visibility, private uploads, agent findings access controls, new table grants/RLS and migration correctness on local Supabase.
-- E2E: report form validation, photo handling, map evidence drawer, review explanation, empty/error states and simulated partition controls, desktop and narrow mobile width.
-- Existing commands: `npm run preflight`, `npm run validate`, `npm run local:status`, `npm run local:test`. Run targeted tests first; note anything skipped.
-- PR order: **contracts and migrations -> independent source/runtime/validation/UI PRs -> integration PR -> demo hardening**. Avoid cherry-picking unreviewed work across branches.
+- E2E: a handful of focused browser checks: report form validation, map/evidence read path, a basic partition demo and one mobile viewport. Avoid extensive manual user research.
+- Existing commands: `npm run preflight`, `npm run validate`, `npm run local:status`, `npm run local:test`. Run targeted tests first; note anything skipped. Minimal **manual user testing** does not mean skipping CI, RLS/security tests, agent reconciliation tests or existing smoke checks.
+- PR order: **contracts and migrations -> parallel Outrolife FIRMS+GET+map, PC weather+runtime, Danil validation, d3vmakes reporting UI PRs -> Mac integration PR -> demo hardening**. Avoid cherry-picking unreviewed work across branches.
 - Owner coordinates one human approval per PR. Claude Code sessions never approve, merge or push to `main`. Existing `/feature-dev`, `/bugfix`, `/self-review` skills remain mandatory for the relevant phases.
