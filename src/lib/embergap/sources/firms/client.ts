@@ -32,9 +32,15 @@ export const FIRMS_ENV = {
   },
 } as const;
 
-/** Demo unless EMBERGAP_FIRMS_MODE=live. Live mode never falls back to fixtures. */
+/**
+ * EMBERGAP_FIRMS_MODE=live or demo decides. Unset, live NASA data is used as
+ * soon as a NASA_FIRMS_MAP_KEY is configured, and labelled synthetic fixtures
+ * only without one. Live mode never falls back to fixtures.
+ */
 export function getFirmsMode(env: EnvSource = process.env): "demo" | "live" {
-  return env.EMBERGAP_FIRMS_MODE?.trim().toLowerCase() === "live" ? "live" : "demo";
+  const mode = env.EMBERGAP_FIRMS_MODE?.trim().toLowerCase();
+  if (mode === "live" || mode === "demo") return mode;
+  return env.NASA_FIRMS_MAP_KEY?.trim() ? "live" : "demo";
 }
 
 export function readFirmsEnv(env: EnvSource = process.env) {

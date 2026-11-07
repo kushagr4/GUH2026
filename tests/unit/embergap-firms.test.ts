@@ -110,6 +110,9 @@ describe("getThermalAnomalies", () => {
     const fetchCsv = vi.fn();
     const result = await getThermalAnomalies({ bbox: BBOX, now: NOW, env: {} }, { fetchCsv });
     expect(getFirmsMode({})).toBe("demo");
+    // A configured key switches to live NASA data, unless demo is asked for explicitly.
+    expect(getFirmsMode({ NASA_FIRMS_MAP_KEY: "abcdef0123456789abcd" })).toBe("live");
+    expect(getFirmsMode({ NASA_FIRMS_MAP_KEY: "abcdef0123456789abcd", EMBERGAP_FIRMS_MODE: "demo" })).toBe("demo");
     expect(fetchCsv).not.toHaveBeenCalled();
     expect(result.detections.length).toBeGreaterThan(0);
     expect(result.detections.every((d) => d.isSynthetic && d.id.startsWith("00000000-"))).toBe(true);
