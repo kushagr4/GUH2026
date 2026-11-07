@@ -15,6 +15,6 @@ describe("local Supabase settings", () => {
     expect(() => localSettings("API_URL=http://127.0.0.1:54321\nANON_KEY=same\nSERVICE_ROLE_KEY=same")).toThrow();
   });
   it("handles quoted values", () => {
-    expect(parseStatusEnv('API_URL="http://127.0.0.1:54321"').API_URL).toBe("http://127.0.0.1:54321");
+    expect(parseStatusEnv('API_URL="http://127.0.0.1:54321"')).toHaveProperty("API_URL", "http://127.0.0.1:54321");
   });
 });

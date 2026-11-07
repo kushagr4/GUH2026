@@ -1,42 +1,38 @@
-import { readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-/** Team requirement: nothing in the normal workflow may need a container runtime. */
-const FORBIDDEN = /\bdocker\b|\bpodman\b|supabase\s+(start|stop|status)\b|supabase\s+db\s+reset\b|supabase\s+db\s+(diff|pull|dump)\b/i;
-
-function scriptFiles(directory: string): string[] {
-  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) =>
-    entry.isDirectory()
-      ? scriptFiles(join(directory, entry.name))
-      : [join(directory, entry.name)],
-  );
-}
-
-describe("Docker-free workflow", () => {
-  it("package.json scripts never call a container runtime or local stack", () => {
+/**
+ * Docker is now required for local development, but CI and hosted deployment
+ * must remain Docker-independent, and remote resets must never be possible.
+ */
+describe("local Docker / remote CI separation", () => {
+  it("provides local Docker-backed scripts without modifying hosted commands", () => {
     const { scripts } = JSON.parse(readFileSync("package.json", "utf8")) as {
       scripts: Record<string, string>;
     };
-    for (const [name, command] of Object.entries(scripts)) {
-      expect(command, name).not.toMatch(FORBIDDEN);
-    }
+    expect(scripts["local:dev"]).toContain("local-supabase.mjs dev");
+    expect(scripts["local:up"]).toContain("local-supabase.mjs up");
+    expect(scripts["local:reset"]).toContain("local-supabase.mjs reset");
+    expect(scripts["db:push"]).toContain("db.mjs push");
   });
 
-  it("helper scripts never call a container runtime or local stack", () => {
-    for (const file of scriptFiles("scripts")) {
-      expect(readFileSync(file, "utf8"), file).not.toMatch(FORBIDDEN);
-    }
-  });
-
-  it("the CI workflow does not depend on one", () => {
+  it("normal CI needs no Docker, containers, or remote credentials", () => {
     const workflow = readFileSync(".github/workflows/ci.yml", "utf8");
-    expect(workflow).not.toMatch(FORBIDDEN);
+    expect(workflow).not.toMatch(/docker\s+(run|compose|build)|supabase\s+start|local:dev|local:up/i);
   });
 
-  it("no script resets the shared database", () => {
+  it("the local helper requires explicit opt-in for destructive local reset", () => {
+    const helper = readFileSync("scripts/local-supabase.mjs", "utf8");
+    expect(helper).toContain('process.env.GUH_ALLOW_LOCAL_RESET !== "true"');
+    expect(helper).toContain('["db", "reset", "--local"]');
+    expect(helper).not.toContain('"--remote"');
+  });
+
+  it("remote migration commands retain safeguards against resetting the cloud", () => {
     const db = readFileSync("scripts/db.mjs", "utf8");
     expect(db).not.toMatch(/["']reset["']/);
     expect(db).not.toMatch(/--include-seed/);
+    expect(db).toContain("requireMigrationOwner()");
+    expect(db).toContain('["db", "push", "--remote"]');
   });
 });
