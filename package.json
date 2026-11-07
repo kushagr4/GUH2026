@@ -29,7 +29,14 @@
     "env:share": "node scripts/db.mjs env-share",
     "env:test": "node scripts/db.mjs env-test",
     "secrets:scan": "node scripts/scan-secrets.mjs",
-    "check:bundle": "node scripts/check-client-bundle.mjs"
+    "check:bundle": "node scripts/check-client-bundle.mjs",
+    "local:up": "node scripts/local-supabase.mjs up",
+    "local:dev": "node scripts/local-supabase.mjs dev",
+    "local:stop": "node scripts/local-supabase.mjs stop",
+    "local:status": "node scripts/local-supabase.mjs status",
+    "local:env": "node scripts/local-supabase.mjs env",
+    "local:types": "node scripts/local-supabase.mjs types",
+    "local:reset": "node scripts/local-supabase.mjs reset"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "1.5.0",

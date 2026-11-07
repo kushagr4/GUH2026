@@ -6,13 +6,13 @@ A reusable Next.js and Supabase foundation for GreatUniHack 2026. It contains ge
 
 ## Non-negotiable constraints
 
-- **No Docker and no local Postgres, on any machine.** Never run `supabase start`, `stop`, `status` or `db reset`, and don't add anything that needs a container runtime.
-- **One shared hosted Supabase project on the free plan.** Never enable paid services, add-ons or database branching, and never create billable resources.
-- **Never reset the shared database or delete teammates' data.** Migrations are additive. Tests touch only disposable users they create themselves.
-- **Only the designated migration owner deploys migrations** (`supabase/MIGRATION_OWNER`). Everyone else opens a PR containing the migration file.
+- **Docker-first local development.** Use `npm run local:dev` to run the CLI-managed Supabase Docker stack and frontend. Local resets require explicit opt-in.
+- **Local by default.** Each teammate has independent Docker-backed Supabase. Keep the hosted Free project only for deployments and shared demos; do not add paid services.
+- **Never reset the hosted database or delete teammates' data.** Explicitly authorized local-only resets may delete only the caller's local DB.
+- **Only the designated migration owner deploys hosted migrations** (`supabase/MIGRATION_OWNER`). Everyone else opens a PR containing the migration file.
 - **All schema changes go through version-controlled files** in `supabase/migrations/`. Never change the schema through the dashboard or MCP without a matching migration file.
 
-## Architecture
+## Local development\n\nRead `docs/docker-development.md`. Run `npm ci && npm run local:dev` with Docker Desktop active. Local client env is generated automatically. Do not log the CLI status output, which contains privileged values. The existing `db:*` wrappers still target the hosted project and must never be used for local development.\n\n## Architecture
 
 ```
 src/app/            Routes only. Keep them thin.
@@ -95,7 +95,7 @@ e2e/                Playwright. smoke needs no backend, hosted needs SUPABASE_TE
 | `db:status`, `db:plan`, `db:push`, `db:types`, `db:audit`, `db:sweep-tests`, `env:share`, `env:test` | Hosted operations (migration owner) |
 | `secrets:scan`, `check:bundle` | Credential scan of files and history; scan of the built client bundle |
 
-Supabase CLI v3 targets the local stack by default, so hosted commands need `--remote`. The `db:*` scripts handle this. Prefer them over calling the CLI directly.
+Use `local:*` scripts for Docker development. The existing `db:*` scripts remain owner-only hosted operations. Explicitly scope CLI commands to local or remote.
 
 ## MCP
 

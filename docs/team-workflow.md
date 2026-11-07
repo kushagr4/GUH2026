@@ -1,10 +1,10 @@
 # Team workflow
 
-The team shares one database, so the frontend and the schema have different rules.
+Each teammate now has an independent Docker-backed local database. SQL migrations are shared through Git, while the hosted project remains reserved for demo/deployment.
 
 ## Frontend and app changes
 
-Everyone has their own branch, dev server and `.env.local`, so this work can't disturb anyone else.
+Everyone has their own branch, dev server, independent local Supabase and automatically generated `.env.local`.
 
 1. `git switch -c feature/short-name`
 2. Build it, and commit small.
@@ -14,7 +14,7 @@ Everyone has their own branch, dev server and `.env.local`, so this work can't d
 
 ## Migration ownership
 
-**One designated developer deploys migrations.** The name is in `supabase/MIGRATION_OWNER`.
+**One designated developer deploys migrations to the shared hosted project.** Every teammate may apply reviewed migrations locally. The name is in `supabase/MIGRATION_OWNER`.
 
 | | Anyone | Migration owner |
 | --- | --- | --- |
@@ -92,11 +92,11 @@ There's no reset on a shared database. Write a new forward migration that correc
 
 ## Secrets
 
-- Teammates only ever need the URL and publishable key.
+- Teammates only need Docker and `npm run local:dev`; public local connection values are generated automatically.
 - `.env.local` and `.env.test.local` are gitignored. Never commit them.
 - Share values through a private channel the team trusts. Never put the secret key anywhere shared.
 - CI needs no secrets. Hosted CI is opt-in and uses GitHub Actions secrets.
 
 ## Onboarding a new teammate
 
-Send them the [README quick start](../README.md#quick-start), the two shared values, and this page. They should be running in under 5 minutes. `npm run doctor` tells them what's wrong if not.
+Send them the [README quick start](../README.md#quick-start) and this page. No shared keys are needed for local development. They should be running in under 5 minutes. `npm run doctor` tells them what's wrong if not.
