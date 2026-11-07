@@ -180,13 +180,15 @@ test.describe("hosted journey", () => {
     await signIn(page);
     await page.goto("/dev/integrations");
     const list = page.getByTestId("integrations");
-    // The E2E server sets no integration variables, so nothing is spent here.
-    await expect(list.locator('[data-integration="firecrawl"]')).toHaveAttribute("data-state", "off");
+    // The E2E server blanks every integration variable, so nothing is spent here.
+    for (const id of ["elevenlabs", "n8n", "firecrawl"]) {
+      await expect(list.locator(`[data-integration="${id}"]`)).toHaveAttribute("data-state", "off");
+    }
     await expect(list.locator('[data-integration="github"]')).toHaveAttribute("data-state", "ready");
-    await expect(
-      page.getByTestId("firecrawl-check").getByRole("button", { name: "Scrape" }),
-    ).toBeDisabled();
-    expect(await page.content()).not.toMatch(/\bfc-[a-f0-9]{32}\b|github_pat_|ghp_/);
+    await expect(page.getByTestId("elevenlabs-check").getByRole("button", { name: "Speak" })).toBeDisabled();
+    await expect(page.getByTestId("n8n-check").getByRole("button", { name: "Send test event" })).toBeDisabled();
+    await expect(page.getByTestId("firecrawl-check").getByRole("button", { name: "Scrape" })).toBeDisabled();
+    expect(await page.content()).not.toMatch(/\bfc-[a-f0-9]{32}\b|\bsk_[a-f0-9]{48}\b|github_pat_|ghp_/);
   });
 
   test("streams an AI reply through the authenticated route (mock provider)", async ({

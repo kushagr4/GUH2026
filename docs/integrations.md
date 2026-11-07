@@ -11,7 +11,12 @@ src/lib/rate-limit.ts             In-memory sliding-window limiter (shared with 
 src/lib/integrations/
   env.ts        readIntegrationEnv(): validates server-only variables, never reveals values
   errors.ts     IntegrationError, plus helpers for Server Actions and route handlers
-  http.ts       createApiClient(): timeouts, retries, rate limits, concurrency, schema checks
+  http.ts       createApiClient(): timeouts, retries, rate limits, concurrency, schema checks,
+                JSON, binary responses (requestBinary) and multipart uploads
+  elevenlabs.ts Optional. Text-to-speech, speech-to-text, voices, usage, browser tokens.
+                Off until ELEVENLABS_API_KEY is set
+  n8n.ts        Optional. Starts n8n workflows through a webhook, and checks callbacks.
+                Off until N8N_WEBHOOK_URL and N8N_WEBHOOK_SECRET are set
   firecrawl.ts  Optional. Web pages to markdown or structured JSON. Off until FIRECRAWL_API_KEY is set
   github.ts     GitHub REST, public data with no token, plus webhook signature checks
   status.ts     Every integration's state, for /dev/integrations and /dev
@@ -137,6 +142,52 @@ export async function POST(request: Request) {
   }
 }
 ```
+
+### Returning audio (ElevenLabs)
+
+`speak()` returns the bytes, so a route handler can send them straight back. Cache the result in Storage when the same text will be played again.
+
+```ts
+import { z } from "zod";
+import { getElevenLabs } from "@/lib/integrations/elevenlabs";
+import { integrationErrorResponse } from "@/lib/integrations/errors";
+import { getCurrentUser } from "@/lib/supabase/auth";
+
+const input = z.object({ text: z.string().trim().min(1).max(1000) });
+
+export async function POST(request: Request) {
+  const user = await getCurrentUser();
+  if (!user) return Response.json({ error: "Please sign in." }, { status: 401 });
+  const parsed = input.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) return Response.json({ error: "Invalid request." }, { status: 400 });
+  try {
+    const speech = await getElevenLabs().speak(parsed.data.text, { signal: request.signal });
+    return new Response(speech.audio, {
+      headers: { "Content-Type": speech.contentType, "Cache-Control": "private, no-store" },
+    });
+  } catch (error) {
+    return integrationErrorResponse(error);
+  }
+}
+```
+
+In the browser: `const blob = await (await fetch("/api/speak", { method: "POST", body })).blob()`, then `new Audio(URL.createObjectURL(blob)).play()`.
+
+For speech-to-text, pass a `File` from a form or `MediaRecorder` to `getElevenLabs().transcribe(file)`. It is sent as multipart, and files are limited to 10 MB.
+
+### Starting an n8n workflow
+
+Prefer a workflow whose Webhook node replies through **Respond to Webhook**. The result then comes back in the same request, and the app saves it as the signed-in user, under RLS:
+
+```ts
+const summary = await getN8n().trigger(
+  "note.created",
+  { noteId, transcript },
+  { schema: z.object({ actions: z.array(z.string()) }), timeoutMs: 60_000 },
+);
+```
+
+If n8n has to call back later, check the request with `isAuthorizedN8nCallback(request)` before doing anything. Never give n8n the Supabase secret key.
 
 ### Receiving GitHub webhooks
 

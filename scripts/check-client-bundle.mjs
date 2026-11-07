@@ -26,6 +26,11 @@ const FORBIDDEN = [
   { label: "the GITHUB_API_TOKEN name", pattern: /GITHUB_API_TOKEN/ },
   { label: "the GITHUB_WEBHOOK_SECRET name", pattern: /GITHUB_WEBHOOK_SECRET/ },
   { label: "the Firecrawl client", pattern: /api\.firecrawl\.dev/ },
+  { label: "an ElevenLabs key", pattern: /\bsk_[a-f0-9]{48}\b/ },
+  { label: "the ELEVENLABS_API_KEY name", pattern: /ELEVENLABS_API_KEY/ },
+  { label: "the ElevenLabs client", pattern: /api\.elevenlabs\.io/ },
+  { label: "the N8N_WEBHOOK_SECRET name", pattern: /N8N_WEBHOOK_SECRET/ },
+  { label: "the N8N_CALLBACK_SECRET name", pattern: /N8N_CALLBACK_SECRET/ },
 ];
 
 // Also search for the literal values on this machine, whatever their format.
@@ -36,6 +41,9 @@ const SECRET_VALUES = [
   "FIRECRAWL_API_KEY",
   "GITHUB_API_TOKEN",
   "GITHUB_WEBHOOK_SECRET",
+  "ELEVENLABS_API_KEY",
+  "N8N_WEBHOOK_SECRET",
+  "N8N_CALLBACK_SECRET",
 ]
   .map((name) => ({ name, value: process.env[name] }))
   .filter(({ value }) => value && value.length >= 8);

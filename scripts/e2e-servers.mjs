@@ -10,7 +10,15 @@ if (build.status !== 0) process.exit(build.status ?? 1);
 
 // Next.js never overrides a variable that is already set, even to "", so this
 // keeps keys in .env.local away from the tests: no integration runs, nothing is spent.
-const OFFLINE = { FIRECRAWL_API_KEY: "", GITHUB_API_TOKEN: "", GITHUB_WEBHOOK_SECRET: "" };
+const OFFLINE = {
+  ELEVENLABS_API_KEY: "",
+  N8N_WEBHOOK_URL: "",
+  N8N_WEBHOOK_SECRET: "",
+  N8N_CALLBACK_SECRET: "",
+  FIRECRAWL_API_KEY: "",
+  GITHUB_API_TOKEN: "",
+  GITHUB_WEBHOOK_SECRET: "",
+};
 
 const serve = (port, extraEnv) =>
   spawn(process.execPath, [NEXT, "start", "-p", port, "-H", "127.0.0.1"], {

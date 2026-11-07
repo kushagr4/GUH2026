@@ -33,7 +33,7 @@ export type ApiRequest<Schema extends z.ZodType> = {
   /** Relative to baseUrl and starting with "/". Absolute URLs are refused. */
   path: string;
   query?: Record<string, string | number | boolean | undefined>;
-  /** Sent as JSON. */
+  /** Sent as JSON, or as-is for FormData (multipart uploads), Blob or bytes. */
   body?: unknown;
   /** Validates the response. Select only the fields you use. */
   schema: Schema;
@@ -46,9 +46,35 @@ export type ApiRequest<Schema extends z.ZodType> = {
   signal?: AbortSignal;
 };
 
+/** For audio, images and other files. The whole body is read, up to `maxBytes`. */
+export type BinaryRequest = Omit<ApiRequest<z.ZodType>, "schema"> & {
+  /** The Accept header, for example "audio/mpeg". */
+  accept?: string;
+  /** Larger responses are refused. Defaults to 10 MB. */
+  maxBytes?: number;
+};
+
+export type BinaryResponse = { data: ArrayBuffer; contentType: string };
+
 export type ApiClient = {
   request<Schema extends z.ZodType>(request: ApiRequest<Schema>): Promise<z.infer<Schema>>;
+  requestBinary(request: BinaryRequest): Promise<BinaryResponse>;
 };
+
+function encodeBody(body: unknown): { body?: BodyInit; contentType?: string } {
+  if (body === undefined) return {};
+  if (
+    body instanceof FormData ||
+    body instanceof Blob ||
+    body instanceof URLSearchParams ||
+    body instanceof ArrayBuffer ||
+    ArrayBuffer.isView(body)
+  ) {
+    // fetch sets the right Content-Type, including the multipart boundary.
+    return { body: body as BodyInit };
+  }
+  return { body: JSON.stringify(body), contentType: "application/json" };
+}
 
 /**
  * Worth another attempt: timeouts, network failures, and 429 or 5xx from the
@@ -149,11 +175,46 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
     return url;
   }
 
-  async function attempt<Schema extends z.ZodType>(
-    request: ApiRequest<Schema>,
+  type Reader<T> = (response: Response, label: string) => Promise<T>;
+
+  const readJson =
+    <Schema extends z.ZodType>(schema: Schema): Reader<z.infer<Schema>> =>
+    async (response, label) => {
+      const text = await response.text();
+      let json: unknown;
+      try {
+        json = text ? JSON.parse(text) : undefined;
+      } catch {
+        throw fail("invalid_response", `${label} did not return JSON`);
+      }
+      const parsed = schema.safeParse(json);
+      if (!parsed.success) {
+        const fields = parsed.error.issues.map((issue) => issue.path.join(".") || "(root)");
+        throw fail("invalid_response", `${label} response did not match the schema at ${fields.join(", ")}`);
+      }
+      return parsed.data;
+    };
+
+  const readBinary =
+    (maxBytes: number): Reader<BinaryResponse> =>
+    async (response, label) => {
+      const declared = Number(response.headers.get("content-length"));
+      if (declared > maxBytes) throw fail("invalid_response", `${label} response is too large`);
+      const data = await response.arrayBuffer();
+      if (data.byteLength > maxBytes) throw fail("invalid_response", `${label} response is too large`);
+      if (data.byteLength === 0) throw fail("invalid_response", `${label} returned an empty body`);
+      return {
+        data,
+        contentType: response.headers.get("content-type") ?? "application/octet-stream",
+      };
+    };
+
+  async function attempt<T>(
+    request: Omit<ApiRequest<z.ZodType>, "schema"> & { accept?: string },
     url: URL,
     label: string,
-  ): Promise<z.infer<Schema>> {
+    read: Reader<T>,
+  ): Promise<T> {
     for (const limiter of limiters) {
       const { allowed, retryAfterSeconds: wait } = limiter.check("outbound");
       if (!allowed) {
@@ -165,82 +226,78 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
 
     const timeout = AbortSignal.timeout(request.timeoutMs ?? defaultTimeout);
     const signal = request.signal ? AbortSignal.any([request.signal, timeout]) : timeout;
-    const hasBody = request.body !== undefined;
+    const { body, contentType } = encodeBody(request.body);
 
-    let response: Response;
-    let text: string;
+    // Both the request and reading the body count toward the timeout.
     try {
-      response = await fetchImpl(url, {
+      const response = await fetchImpl(url, {
         method: request.method ?? "GET",
         headers: {
           Accept: "application/json",
-          ...(hasBody ? { "Content-Type": "application/json" } : {}),
+          ...(contentType ? { "Content-Type": contentType } : {}),
           ...options.headers,
+          ...(request.accept ? { Accept: request.accept } : {}),
         },
-        body: hasBody ? JSON.stringify(request.body) : undefined,
+        body,
         signal,
         cache: "no-store",
       });
-      text = await response.text();
+
+      if (!response.ok) {
+        const text = await response.text();
+        const kind = classify(response.status, response.headers);
+        throw fail(kind, `${label} returned HTTP ${response.status}: ${text.slice(0, 300)}`, {
+          upstreamStatus: response.status,
+          retryAfterSeconds: retryAfterSeconds(response.headers),
+        });
+      }
+      return await read(response, label);
     } catch (error) {
+      if (error instanceof IntegrationError) throw error;
       if (request.signal?.aborted) throw fail("cancelled", `${label} was cancelled`);
       if (timeout.aborted) throw fail("timeout", `${label} timed out`, { cause: error });
       throw fail("network", `${label} could not connect`, { cause: error });
     }
+  }
 
-    if (!response.ok) {
-      const kind = classify(response.status, response.headers);
-      throw fail(kind, `${label} returned HTTP ${response.status}: ${text.slice(0, 300)}`, {
-        upstreamStatus: response.status,
-        retryAfterSeconds: retryAfterSeconds(response.headers),
-      });
-    }
+  async function execute<T>(
+    request: Omit<ApiRequest<z.ZodType>, "schema"> & { accept?: string },
+    read: Reader<T>,
+  ): Promise<T> {
+    const method = request.method ?? "GET";
+    const label = `${method} ${request.path.split("?")[0]}`;
+    const url = buildUrl(request.path, request.query);
+    const retry = request.retry ?? method === "GET";
 
-    let json: unknown;
-    try {
-      json = text ? JSON.parse(text) : undefined;
-    } catch {
-      throw fail("invalid_response", `${label} did not return JSON`);
-    }
-    const parsed = request.schema.safeParse(json);
-    if (!parsed.success) {
-      const fields = parsed.error.issues.map((issue) => issue.path.join(".") || "(root)");
-      throw fail("invalid_response", `${label} response did not match the schema at ${fields.join(", ")}`);
-    }
-    return parsed.data;
+    return run(async () => {
+      for (let attemptNumber = 0; ; attemptNumber += 1) {
+        try {
+          return await attempt(request, url, label, read);
+        } catch (error) {
+          if (!(error instanceof IntegrationError)) throw error;
+          const delay = error.retryAfterSeconds
+            ? error.retryAfterSeconds * 1000
+            : 250 * 2 ** attemptNumber + Math.floor(Math.random() * 100);
+          const canRetry =
+            retry && attemptNumber < retries && delay <= maxRetryDelayMs && isTransient(error);
+          if (!canRetry) {
+            const status = error.upstreamStatus ? ` (HTTP ${error.upstreamStatus})` : "";
+            console.warn(`[integrations] ${integration} ${label} failed: ${error.kind}${status}`);
+            throw error;
+          }
+          await sleep(delay);
+        }
+      }
+    });
   }
 
   return {
     // async, so even an invalid path is a rejected promise rather than a throw.
     async request(request) {
-      const method = request.method ?? "GET";
-      const label = `${method} ${request.path.split("?")[0]}`;
-      const url = buildUrl(request.path, request.query);
-      const retry = request.retry ?? method === "GET";
-
-      return run(async () => {
-        for (let attemptNumber = 0; ; attemptNumber += 1) {
-          try {
-            return await attempt(request, url, label);
-          } catch (error) {
-            if (!(error instanceof IntegrationError)) throw error;
-            const delay = error.retryAfterSeconds
-              ? error.retryAfterSeconds * 1000
-              : 250 * 2 ** attemptNumber + Math.floor(Math.random() * 100);
-            const canRetry =
-              retry &&
-              attemptNumber < retries &&
-              delay <= maxRetryDelayMs &&
-              isTransient(error);
-            if (!canRetry) {
-              const status = error.upstreamStatus ? ` (HTTP ${error.upstreamStatus})` : "";
-              console.warn(`[integrations] ${integration} ${label} failed: ${error.kind}${status}`);
-              throw error;
-            }
-            await sleep(delay);
-          }
-        }
-      });
+      return execute(request, readJson(request.schema));
+    },
+    async requestBinary(request) {
+      return execute(request, readBinary(request.maxBytes ?? 10 * 1024 * 1024));
     },
   };
 }

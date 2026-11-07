@@ -1,20 +1,120 @@
-# Sponsor technology: Firecrawl, Lovable and GitHub
+# Sponsor technology: ElevenLabs, n8n, Firecrawl, Lovable and GitHub
 
-Researched from official documentation on **7 November 2026**. Free tiers and prize rules change, so confirm anything important at the event. Where the docs were unclear or contradicted each other, this page says so.
+Researched from official documentation on **7 November 2026**. Free tiers and prize rules change, so confirm anything important at the event. Where the docs were unclear or contradicted each other, or something couldn't be verified, this page says so.
 
-Strategy, the decision matrix and project concepts are in [sponsor-strategy.md](sponsor-strategy.md). The code pattern is in [integrations.md](integrations.md).
+**Prize status:** "Best Use of ElevenLabs" and "Best Use of n8n" are confirmed prize categories, from the team's reading of the Devpost page. The others are sponsors whose prizes, if any, are announced at the opening ceremony. Details are in [sponsor-strategy.md](sponsor-strategy.md), along with the decision matrix and project concepts. The code pattern is in [integrations.md](integrations.md).
 
 ## At a glance
 
-| | Firecrawl | Lovable | GitHub |
-| --- | --- | --- | --- |
-| **What it is** | API that turns web pages into markdown or structured JSON | AI app builder that generates and hosts web apps | Code hosting, plus APIs, Actions, OAuth and webhooks |
-| **Setup** | Sign up, copy an `fc-` key into `.env.local` | Sign up, build in the browser | REST works with no setup. A token, OAuth App or webhook takes about 5 minutes each |
-| **Free tier** | 1,000 credits, 10 requests a minute, 2 browsers at once, no card | 5 build credits a day (30 a month cap), publish to `*.lovable.app` | Public REST: 60 requests an hour. With a token: 5,000 an hour |
-| **Fits our stack** | Very well. Server-side REST, results stored in Supabase | As a **separate** app only. It can't edit our Next.js repo | Very well. REST client ready, Supabase supports GitHub login |
-| **Difficulty in 6 h** | Low | Low for a separate app, and **high** if you try to merge it with ours | Low (REST, login) to medium (webhooks, Actions bots) |
-| **Main risk** | Credits and rate limit during a live demo | It changing the shared database, which breaks our migration rules | Unauthenticated rate limit on shared venue Wi-Fi |
-| **Ready in this repo** | `src/lib/integrations/firecrawl.ts`, off until a key is set | Guidance below. Nothing to install | `src/lib/integrations/github.ts`, webhook verification |
+| | ElevenLabs | n8n | Firecrawl | Lovable | GitHub |
+| --- | --- | --- | --- | --- | --- |
+| **Prize** | **Confirmed** | **Confirmed** | Unknown | Unknown | Unknown |
+| **What it is** | Speech API: text-to-speech, speech-to-text, voice agents | Workflow automation with a visual editor | Web pages to markdown or structured JSON | AI app builder that hosts apps | APIs, Actions, OAuth and webhooks |
+| **Setup** | Sign up, create a restricted key | Cloud trial (no card) or `npx n8n` (no Docker) | Sign up, copy an `fc-` key | Sign up, build in the browser | REST works now. A token takes 5 min |
+| **Free tier** | 10,000 credits a month, 2 requests at once | No free cloud plan. Self-hosting is free | 1,000 credits, 10 requests a minute | 5 build credits a day | 60 requests an hour, or 5,000 with a token |
+| **Fits our stack** | Very well, server-side | Well. It calls our app, and we call it | Very well | As a separate app only | Very well |
+| **Difficulty in 6 h** | Low (TTS) to medium (recording, live captions) | Low to medium | Low | Low separately, high merged | Low to medium |
+| **Main risk** | **Free accounts blocked on shared IPs** | A local n8n isn't reachable from a deployed app | Credits during a live demo | It changing the shared database | Unauthenticated limit on venue Wi-Fi |
+| **Ready in this repo** | `elevenlabs.ts`, off until a key is set | `n8n.ts`, off until configured | `firecrawl.ts`, off until a key is set | Guidance only | `github.ts` |
+
+---
+
+## ElevenLabs
+
+### Setup and authentication
+
+1. **One** teammate signs up at [elevenlabs.io](https://elevenlabs.io/pricing) (see the IP warning below).
+2. Create an API key on the dashboard. Keys can be **restricted to specific endpoints**, given a **credit limit** and limited to IP ranges ([authentication](https://elevenlabs.io/docs/api-reference/authentication)). Allow only text-to-speech, speech-to-text, voices and user read access, and set a credit cap.
+3. Set `ELEVENLABS_API_KEY` in `.env.local` (server-only), restart, and press **Speak** on `/dev/integrations`.
+
+Requests send the key in the `xi-api-key` header. The key's format isn't documented, so our checker only requires a plausible length. The secret scanners look for the long-standing `sk_` plus 48 hex shape.
+
+**Browser access without the key:** `POST /v1/single-use-token/{realtime_scribe|batch_scribe|tts_websocket}` returns a token that lasts 15 minutes and works once ([tokens](https://elevenlabs.io/docs/api-reference/tokens/create)). Our `createBrowserToken()` wraps it, for live captions or streaming speech straight from the browser.
+
+### Free plan
+
+From [pricing](https://elevenlabs.io/pricing) and the [429 help page](https://elevenlabs.io/docs/help-center/technical/api-error-code-429):
+- **10,000 credits a month**, shared by every product, with no rollover. The pricing table suggests about 10 minutes of speech, but its layout was unclear.
+- **2 requests at once** on Free. Our client caps itself at 2.
+- **Not for commercial use.** Fine for a hackathon, but credit ElevenLabs in the demo anyway; third parties say Free requires it.
+- Library voices are not available through the API on Free. Premade voices, such as our default "George" `JBFqnCBsd6RMkjVDRZzb` from the [quickstart](https://elevenlabs.io/docs/quickstart), are.
+- `mp3_44100_192` and 44.1 kHz PCM/WAV need paid plans. Our default is `mp3_44100_128`.
+- There's no student programme. The startup grant doesn't fit a hackathon.
+
+**The shared-IP risk.** ElevenLabs can disable Free-tier use when it sees "unusual activity", including another Free account on the same IP: a school, an office, or a venue's Wi-Fi. Its help page says this can't be reversed on a Free account, and that paid accounts aren't flagged ([help article](https://elevenlabs.io/docs/help-center/account/general/what-does-unusual-activity-detected-free-tier-usage-disabled-if-you-are-using-proxy-vpn-you-might-need-to-purchase-a-paid-plan-to-not-trigger-our-abuse-detectors-mean)). To reduce the risk:
+- Have one account for the team.
+- Make ElevenLabs calls from one machine, ideally on a phone hotspot.
+- Ask the sponsor for a code that upgrades the account without a card.
+
+Our client recognises the error and shows "ElevenLabs has paused free-tier use for this account or network".
+
+### API
+
+Base URL `https://api.elevenlabs.io`, header `xi-api-key`.
+
+| Endpoint | Use | In our client |
+| --- | --- | --- |
+| `POST /v1/text-to-speech/{voice_id}?output_format=…` with `{ text, model_id, voice_settings?, language_code? }` | Text to audio bytes ([reference](https://elevenlabs.io/docs/api-reference/text-to-speech/convert)). A `/stream` variant also exists | `speak()`, buffered |
+| `POST /v1/speech-to-text`, multipart with `model_id`, `file`, `language_code?`, `diarize?` | Audio to `{ text, language_code, words[] }` ([reference](https://elevenlabs.io/docs/api-reference/speech-to-text/convert)) | `transcribe()` |
+| `GET /v2/voices?category=premade` | Voices you can use | `listVoices()` |
+| `GET /v1/user/subscription` | `character_count` and `character_limit` this period | `getUsage()` |
+| `POST /v1/single-use-token/{type}` | Short-lived browser token | `createBrowserToken()` |
+
+**Models** ([models](https://elevenlabs.io/docs/overview/models)):
+
+| Model | Characters per request | Notes |
+| --- | --- | --- |
+| `eleven_flash_v2_5` | 40,000 | Our default. About 100 ms, 32 languages, half the price of Multilingual v2 |
+| `eleven_multilingual_v2` | 10,000 | |
+| `eleven_v3` | 5,000 | |
+| `eleven_v4` | 10,000 | |
+
+Speech-to-text uses `scribe_v2`, or `scribe_v2_realtime` for live use. `scribe_v1` is deprecated.
+
+The exact credit cost per character on credit plans isn't stated in the model docs. Treat a character as costing up to one credit, and less with Flash.
+
+**Errors** ([errors](https://elevenlabs.io/docs/eleven-api/resources/errors)): `{ "detail": { "code", "message", … } }`.
+- 401 is a bad key.
+- 402 `insufficient_credits` means out of credits.
+- 403 is permissions, or an IP not on the key's allowlist.
+- 422 is a validation error.
+- 429 `rate_limit_exceeded` or `concurrent_limit_exceeded` means too many requests.
+
+The older codes `quota_exceeded` and `system_busy` are handled too.
+
+### Approach
+
+Everything runs server-side. The browser never sees the key.
+
+- **Speech out:** a route handler calls `getElevenLabs().speak(text)` and returns the bytes with their `Content-Type` (see [integrations.md](integrations.md)). Store generated audio in the user's Storage folder and play it from there, so each text is only paid for once.
+- **Speech in:** the browser records with `MediaRecorder`, uploads to Storage (5 MB limit) or straight to a Server Action, and the server calls `transcribe(file)`.
+- **Live:** for captions or a voice agent, issue a single-use token from a route and connect from the browser. This is the hardest option; leave it until the basics work.
+- **Budget:** our client allows `ELEVENLABS_MAX_CHARACTERS_PER_DAY` (5,000 by default) per server instance, 2 requests at once and 30 a minute. A rejected request gives its characters back.
+
+---
+
+## n8n
+
+### Hosting, without Docker or spending
+
+From [pricing](https://n8n.io/pricing) and the [npm install guide](https://docs.n8n.io/hosting/installation/npm/):
+- **There is no free cloud plan.** The Cloud **trial** needs no card. It allows 1,000 executions, 5 at once and a 180-second limit per execution. Its length isn't stated on the pricing page.
+- **Self-hosting the Community Edition is free.** Run `npx n8n` with Node 20.19 to 24, **without Docker**. It serves `http://localhost:5678` and stores its data in `~/.n8n` (SQLite). The docs say npm installs are deprecated from n8n 3.0, so check the version.
+- **n8n's built-in tunnel needs Docker**, so we don't use it. Never expose a laptop to the internet.
+- A local n8n is reachable only from the same machine. Either demo from the laptop running both the app (`npm run dev`) and n8n, or use the Cloud trial for a deployed app.
+- There's no official student plan. Ask the sponsor for a Cloud code; past n8n hackathons have given them out.
+- The [Community Edition](https://docs.n8n.io/hosting/community-edition-features/) lacks SSO, environments, external secrets and project sharing. None of those matters for a 6-hour build.
+
+### How it connects to our app
+
+- **App to n8n** (`src/lib/integrations/n8n.ts`): the Webhook node uses **Header Auth** with header `X-N8N-Secret` and our `N8N_WEBHOOK_SECRET` as the value ([Webhook node](https://docs.n8n.io/integrations/builtin/core-nodes/n8n-nodes-base.webhook/)). Use the **production** URL, which only works while the workflow is active. The test URL only works while the editor is listening. `getN8n().trigger(event, payload)` posts `{ event, sentAt, payload }`. It isn't retried, so a workflow never runs twice.
+- **Getting results back (preferred):** set the Webhook node to respond with a **Respond to Webhook** node. The result comes back in the same request, and our Server Action saves it as the signed-in user, under RLS. No callback route and no admin key are needed.
+- **n8n to the app (only if needed):** an HTTP Request node sends `Authorization: Bearer <N8N_CALLBACK_SECRET>`, and our route checks it with `isAuthorizedN8nCallback(request)`. There is no user session, so a database write needs `createAdminClient()` and careful checks on what is written. Avoid this unless the workflow is long-running.
+- **Never give n8n the Supabase secret key.** Its Supabase node needs one ([credentials](https://docs.n8n.io/integrations/builtin/credentials/supabase.md)), and that key bypasses RLS. Have n8n call our app instead.
+
+### Useful nodes
+
+Webhook, Respond to Webhook, HTTP Request, Schedule Trigger, Anthropic (Claude), GitHub, Gmail and Discord are all built in. We found no official ElevenLabs or Firecrawl node. Call their APIs through our app, or through the HTTP Request node with the key kept in n8n credentials.
 
 ---
 

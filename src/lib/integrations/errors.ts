@@ -55,16 +55,24 @@ export class IntegrationError extends Error {
   /** The status the external service returned, when there was one. */
   readonly upstreamStatus?: number;
   readonly retryAfterSeconds?: number;
+  private readonly publicMessage?: string;
 
   /**
    * `message` is for server logs. It must never contain a key or token: the
    * HTTP client scrubs known secrets, but don't add any yourself.
+   * `publicMessage` replaces the standard user message; write it yourself,
+   * never copy it from a service's response.
    */
   constructor(
     integration: string,
     kind: IntegrationErrorKind,
     message: string,
-    details: { upstreamStatus?: number; retryAfterSeconds?: number; cause?: unknown } = {},
+    details: {
+      upstreamStatus?: number;
+      retryAfterSeconds?: number;
+      cause?: unknown;
+      publicMessage?: string;
+    } = {},
   ) {
     super(message, details.cause === undefined ? undefined : { cause: details.cause });
     this.name = "IntegrationError";
@@ -73,11 +81,12 @@ export class IntegrationError extends Error {
     this.status = STATUS_BY_KIND[kind];
     this.upstreamStatus = details.upstreamStatus;
     this.retryAfterSeconds = details.retryAfterSeconds;
+    this.publicMessage = details.publicMessage;
   }
 
   /** Safe to show to users: no keys, no upstream bodies, no internals. */
   get userMessage(): string {
-    return USER_MESSAGES[this.kind](this.integration, this.retryAfterSeconds);
+    return this.publicMessage ?? USER_MESSAGES[this.kind](this.integration, this.retryAfterSeconds);
   }
 }
 

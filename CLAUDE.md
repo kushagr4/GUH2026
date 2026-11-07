@@ -32,7 +32,7 @@ src/lib/
   storage/          Upload limits and owner-scoped object paths
   realtime/         useTableChanges hook
   ai/               Provider interface, Anthropic and mock providers
-  integrations/     External APIs: createApiClient, env checks, errors, Firecrawl, GitHub
+  integrations/     External APIs: createApiClient, env checks, errors, ElevenLabs, n8n, Firecrawl, GitHub
   rate-limit.ts     In-memory limiter shared by AI and integrations
 supabase/migrations/  The only source of schema truth
 scripts/            Node scripts with no dependencies. No shell-specific syntax
@@ -68,7 +68,7 @@ e2e/                Playwright. smoke needs no backend, hosted needs SUPABASE_TE
 - **RLS:** every public table has RLS enabled and owner-aware policies, written with `(select auth.uid())` and scoped `to authenticated`. Do not grant anything to `anon` without a deliberate, reviewed reason.
 - **Functions:** avoid `SECURITY DEFINER`. If one is truly necessary, pin `search_path`, keep it out of exposed schemas, and waive the lint with a reason.
 - **Storage:** buckets are private with `file_size_limit` and `allowed_mime_types`. Objects live under `<user id>/`.
-- **External APIs** go through `createApiClient` in `src/lib/integrations` (see `docs/integrations.md`), never a bare `fetch` with a key. Integration variables are server-only. Never connect Lovable's Supabase integration to the shared project: it applies schema changes outside our migrations.
+- **External APIs** go through `createApiClient` in `src/lib/integrations` (see `docs/integrations.md`), never a bare `fetch` with a key. Integration variables are server-only. Never connect Lovable's Supabase integration to the shared project: it applies schema changes outside our migrations. Never give n8n the Supabase secret key: n8n calls the app instead.
 - **`createAdminClient()`** bypasses RLS. Avoid it unless there is no user session, and check authorization yourself first.
 - `npm run db:lint` enforces most of this. Waive a rule only with `-- migration-allow: <rule> <reason>`.
 

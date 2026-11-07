@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
+import {
+  DEFAULT_VOICE_ID,
+  createElevenLabsClient,
+  elevenLabsStatus,
+  getElevenLabs,
+} from "@/lib/integrations/elevenlabs";
 import { readIntegrationEnv } from "@/lib/integrations/env";
 import {
   IntegrationError,
@@ -20,6 +26,13 @@ import {
   verifyWebhookSignature,
 } from "@/lib/integrations/github";
 import { createApiClient } from "@/lib/integrations/http";
+import {
+  N8N_SECRET_HEADER,
+  createN8nClient,
+  getN8n,
+  isAuthorizedN8nCallback,
+  n8nStatus,
+} from "@/lib/integrations/n8n";
 import { getIntegrationStatuses } from "@/lib/integrations/status";
 
 // Fake keys are assembled at runtime so this file can't trip the secret scanner.
@@ -507,10 +520,210 @@ describe("GitHub", () => {
   });
 });
 
+describe("binary responses and uploads", () => {
+  const client = (fetch: typeof globalThis.fetch) =>
+    createApiClient({ integration: "Demo", baseUrl: "https://api.example.com", fetch, sleep });
+
+  it("returns bytes and the content type, with the requested Accept header", async () => {
+    const { fetch, calls } = fakeFetch(
+      new Response(new Uint8Array([1, 2, 3]), { headers: { "content-type": "audio/mpeg" } }),
+    );
+    const result = await client(fetch).requestBinary({ method: "POST", path: "/speak", body: { t: 1 }, accept: "audio/mpeg" });
+    expect(new Uint8Array(result.data)).toEqual(new Uint8Array([1, 2, 3]));
+    expect(result.contentType).toBe("audio/mpeg");
+    expect((calls[0].init.headers as Record<string, string>).Accept).toBe("audio/mpeg");
+  });
+
+  it("refuses an oversized or empty body", async () => {
+    const { fetch } = fakeFetch(
+      new Response(new Uint8Array(10), { headers: { "content-length": "999999999" } }),
+      new Response(new Uint8Array(0)),
+    );
+    const api = client(fetch);
+    expect((await caught(api.requestBinary({ path: "/a", maxBytes: 100 }))).message).toContain("too large");
+    expect((await caught(api.requestBinary({ path: "/a" }))).message).toContain("empty");
+  });
+
+  it("sends FormData as multipart, without forcing a JSON content type", async () => {
+    const { fetch, calls } = fakeFetch(json({ ok: true }));
+    const form = new FormData();
+    form.set("file", new Blob(["x"], { type: "audio/webm" }), "a.webm");
+    await client(fetch).request({ method: "POST", path: "/upload", body: form, schema: ok });
+    expect(calls[0].init.body).toBe(form);
+    expect((calls[0].init.headers as Record<string, string>)["Content-Type"]).toBeUndefined();
+  });
+});
+
+describe("ElevenLabs", () => {
+  const KEY = ["sk", "_", "0123456789abcdef".repeat(3)].join("");
+  const audio = () => new Response(new Uint8Array([9, 9, 9]), { headers: { "content-type": "audio/mpeg" } });
+  const client = (fetch: typeof globalThis.fetch, extra = {}) =>
+    createElevenLabsClient({ apiKey: KEY, fetch, sleep, ...extra });
+
+  it("speaks with the documented request: voice in the path, format in the query, xi-api-key header", async () => {
+    const { fetch, calls } = fakeFetch(audio());
+    const speech = await client(fetch).speak("  Hello there  ");
+    expect(speech).toMatchObject({ contentType: "audio/mpeg", characters: 11 });
+    expect(speech.audio.byteLength).toBe(3);
+    expect(calls[0].url).toBe(
+      `https://api.elevenlabs.io/v1/text-to-speech/${DEFAULT_VOICE_ID}?output_format=mp3_44100_128`,
+    );
+    expect((calls[0].init.headers as Record<string, string>)["xi-api-key"]).toBe(KEY);
+    expect(JSON.parse(String(calls[0].init.body))).toEqual({ text: "Hello there", model_id: "eleven_flash_v2_5" });
+  });
+
+  it("refuses empty or overlong text before spending anything", async () => {
+    const { fetch } = fakeFetch();
+    expect((await caught(client(fetch).speak("   "))).kind).toBe("bad_request");
+    expect((await caught(client(fetch).speak("x".repeat(2501)))).kind).toBe("bad_request");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("keeps to a daily character budget, and refunds characters ElevenLabs refused", async () => {
+    const { fetch } = fakeFetch(audio(), json({ detail: [{ msg: "bad voice" }] }, 422), audio());
+    const eleven = client(fetch, { maxCharactersPerDay: 10 });
+    await eleven.speak("hello"); // 5 of 10 used
+    expect((await caught(eleven.speak("world"))).kind).toBe("bad_request"); // refused, refunded
+    await eleven.speak("again"); // 10 of 10 used
+    const over = await caught(eleven.speak("x"));
+    expect(over).toMatchObject({ kind: "rate_limited", userMessage: "Today's speech allowance on this server is used up." });
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
+  it.each([
+    [401, { detail: { code: "detected_unusual_activity", message: "Unusual activity detected. Free Tier usage disabled." } }, "unauthorized", /paused free-tier use/],
+    [402, { detail: { type: "payment_required", code: "insufficient_credits" } }, "quota_exceeded", /run out/],
+    [401, { detail: { status: "quota_exceeded", message: "This request exceeds your quota" } }, "quota_exceeded", /run out/],
+    [429, { detail: { code: "concurrent_limit_exceeded" } }, "rate_limited", /busy/],
+  ])("maps HTTP %i with ElevenLabs' error code to a clear message", async (status, body, kind, message) => {
+    const { fetch } = fakeFetch(json(body, status));
+    const error = await caught(client(fetch).speak("hi"));
+    expect(error.kind).toBe(kind);
+    expect(error.userMessage).toMatch(message);
+    expect(error.message).not.toContain(KEY);
+  });
+
+  it("transcribes audio as multipart with Scribe v2, keeping words only", async () => {
+    const { fetch, calls } = fakeFetch(
+      json({
+        text: "Hi there",
+        language_code: "eng",
+        words: [
+          { text: "Hi", type: "word", start: 0, end: 0.3, speaker_id: "speaker_0" },
+          { text: " ", type: "spacing", start: 0.3, end: 0.35 },
+          { text: "there", type: "word", start: 0.35, end: 0.8, speaker_id: "speaker_0" },
+        ],
+      }),
+    );
+    const transcript = await client(fetch).transcribe(new File(["abc"], "note.webm", { type: "audio/webm" }), { diarize: true });
+    expect(transcript).toEqual({
+      text: "Hi there",
+      languageCode: "eng",
+      words: [
+        { text: "Hi", start: 0, end: 0.3, speaker: "speaker_0" },
+        { text: "there", start: 0.35, end: 0.8, speaker: "speaker_0" },
+      ],
+    });
+    expect(calls[0].url).toBe("https://api.elevenlabs.io/v1/speech-to-text");
+    const form = calls[0].init.body as FormData;
+    expect(form.get("model_id")).toBe("scribe_v2");
+    expect(form.get("diarize")).toBe("true");
+    expect((form.get("file") as File).name).toBe("note.webm");
+  });
+
+  it("refuses files that aren't audio, or are empty or too large", async () => {
+    const { fetch } = fakeFetch();
+    const eleven = client(fetch);
+    expect((await caught(eleven.transcribe(new Blob(["<html>"], { type: "text/html" })))).kind).toBe("bad_request");
+    expect((await caught(eleven.transcribe(new Blob([], { type: "audio/webm" })))).kind).toBe("bad_request");
+    expect((await caught(eleven.transcribe(new Blob([new Uint8Array(11 * 1024 * 1024)], { type: "audio/webm" })))).kind).toBe("bad_request");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("lists premade voices, reads usage and issues single-use browser tokens", async () => {
+    const reset = 1_800_000_000;
+    const { fetch, calls } = fakeFetch(
+      json({ voices: [{ voice_id: "v1", name: "George", category: "premade", preview_url: null }], has_more: false }),
+      json({ tier: "free", character_count: 1200, character_limit: 10000, next_character_count_reset_unix: reset }),
+      json({ token: "sutkn_abc" }),
+    );
+    const eleven = client(fetch);
+    expect(await eleven.listVoices()).toEqual([{ id: "v1", name: "George", category: "premade" }]);
+    expect(calls[0].url).toBe("https://api.elevenlabs.io/v2/voices?category=premade&page_size=50");
+    expect(await eleven.getUsage()).toEqual({
+      tier: "free",
+      used: 1200,
+      limit: 10000,
+      remaining: 8800,
+      resetsAt: new Date(reset * 1000).toISOString(),
+    });
+    expect(await eleven.createBrowserToken("realtime_scribe")).toBe("sutkn_abc");
+    expect(calls[2].url).toBe("https://api.elevenlabs.io/v1/single-use-token/realtime_scribe");
+  });
+
+  it("stays off until a key is set, and never shows the key", () => {
+    expect(() => getElevenLabs({})).toThrow(expect.objectContaining({ kind: "not_configured" }));
+    expect(elevenLabsStatus({}).state).toBe("off");
+    expect(elevenLabsStatus({ ELEVENLABS_API_KEY: "short" }).state).toBe("invalid");
+    const ready = elevenLabsStatus({ ELEVENLABS_API_KEY: KEY });
+    expect(ready).toMatchObject({ state: "ready", detail: expect.stringContaining("eleven_flash_v2_5") });
+    expect(JSON.stringify(ready)).not.toContain(KEY);
+  });
+});
+
+describe("n8n", () => {
+  const SECRET = "n8n-secret-0123456789";
+  const URL_ = "https://team.app.n8n.cloud/webhook/abc-123?source=app";
+
+  it("posts { event, sentAt, payload } to the exact webhook URL with the secret header", async () => {
+    const { fetch, calls } = fakeFetch(json({ summary: "done" }));
+    const reply = await createN8nClient({ webhookUrl: URL_, secret: SECRET, fetch, sleep }).trigger(
+      "note.created",
+      { id: 1 },
+      { schema: z.object({ summary: z.string() }) },
+    );
+    expect(reply).toEqual({ summary: "done" });
+    expect(calls[0].url).toBe(URL_);
+    expect((calls[0].init.headers as Record<string, string>)[N8N_SECRET_HEADER]).toBe(SECRET);
+    expect(JSON.parse(String(calls[0].init.body))).toMatchObject({ event: "note.created", payload: { id: 1 }, sentAt: expect.any(String) });
+  });
+
+  it("does not retry, so a workflow never runs twice by accident", async () => {
+    const { fetch } = fakeFetch(json({}, 503));
+    expect((await caught(createN8nClient({ webhookUrl: URL_, secret: SECRET, fetch, sleep }).trigger("x", {}))).kind).toBe("upstream");
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
+  it("refuses odd event names", async () => {
+    const { fetch } = fakeFetch();
+    expect((await caught(createN8nClient({ webhookUrl: URL_, secret: SECRET, fetch, sleep }).trigger("../x", {}))).kind).toBe("bad_request");
+  });
+
+  it("needs both the URL and a strong secret, and allows a local npx n8n", () => {
+    expect(n8nStatus({ N8N_WEBHOOK_URL: URL_ }).state).toBe("off");
+    expect(n8nStatus({ N8N_WEBHOOK_URL: URL_, N8N_WEBHOOK_SECRET: "short" }).state).toBe("invalid");
+    expect(n8nStatus({ N8N_WEBHOOK_URL: "http://example.com/webhook/x", N8N_WEBHOOK_SECRET: SECRET }).state).toBe("invalid");
+    const local = n8nStatus({ N8N_WEBHOOK_URL: "http://localhost:5678/webhook/x", N8N_WEBHOOK_SECRET: SECRET });
+    expect(local).toMatchObject({ state: "ready", detail: expect.stringContaining("localhost:5678") });
+    expect(JSON.stringify(local)).not.toContain(SECRET);
+    expect(() => getN8n({})).toThrow(expect.objectContaining({ kind: "not_configured" }));
+  });
+
+  it("authorises callbacks only with the configured Bearer secret", () => {
+    const env = { N8N_WEBHOOK_URL: URL_, N8N_WEBHOOK_SECRET: SECRET, N8N_CALLBACK_SECRET: "callback-secret-0123456789" };
+    const call = (authorization?: string) =>
+      new Request("https://app.example/api/n8n", { method: "POST", headers: authorization ? { authorization } : {} });
+    expect(isAuthorizedN8nCallback(call("Bearer callback-secret-0123456789"), env)).toBe(true);
+    expect(isAuthorizedN8nCallback(call("Bearer wrong"), env)).toBe(false);
+    expect(isAuthorizedN8nCallback(call(), env)).toBe(false);
+    expect(isAuthorizedN8nCallback(call("Bearer callback-secret-0123456789"), { ...env, N8N_CALLBACK_SECRET: "" })).toBe(false);
+  });
+});
+
 describe("getIntegrationStatuses", () => {
   it("lists every integration, reading env only and never values", () => {
     const statuses = getIntegrationStatuses({ FIRECRAWL_API_KEY: FIRECRAWL_KEY, GITHUB_API_TOKEN: GITHUB_KEY });
-    expect(statuses.map((status) => status.id)).toEqual(["firecrawl", "github"]);
+    expect(statuses.map((status) => status.id)).toEqual(["elevenlabs", "n8n", "firecrawl", "github"]);
     const text = JSON.stringify(statuses);
     expect(text).not.toContain(FIRECRAWL_KEY);
     expect(text).not.toContain(GITHUB_KEY);

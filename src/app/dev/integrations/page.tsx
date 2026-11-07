@@ -17,11 +17,13 @@ const BADGE: Record<
 export default async function DevIntegrationsPage() {
   await requireUser();
   const statuses = getIntegrationStatuses();
-  const firecrawl = statuses.find((status) => status.id === "firecrawl");
-  const firecrawlDisabledReason =
-    firecrawl?.state === "ready"
-      ? undefined
-      : "Set FIRECRAWL_API_KEY in .env.local and restart the server to try this.";
+  const ready = (id: string) => statuses.some((status) => status.id === id && status.state === "ready");
+  const restart = "in .env.local and restart the server to try this.";
+  const disabledReasons = {
+    elevenlabs: ready("elevenlabs") ? undefined : `Set ELEVENLABS_API_KEY ${restart}`,
+    n8n: ready("n8n") ? undefined : `Set N8N_WEBHOOK_URL and N8N_WEBHOOK_SECRET ${restart}`,
+    firecrawl: ready("firecrawl") ? undefined : `Set FIRECRAWL_API_KEY ${restart}`,
+  };
 
   return (
     <>
@@ -54,7 +56,7 @@ export default async function DevIntegrationsPage() {
           </li>
         ))}
       </ul>
-      <IntegrationsPanel firecrawlDisabledReason={firecrawlDisabledReason} />
+      <IntegrationsPanel disabledReasons={disabledReasons} />
     </>
   );
 }
