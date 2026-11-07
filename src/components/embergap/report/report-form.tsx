@@ -237,8 +237,8 @@ export function ReportForm({ userId }: { userId: string }) {
       submissionRef.current = null;
       submittingRef.current = false;
       setSubmitting(false);
+      // The map page is rendered per request, so it shows the new report.
       router.push("/app/embergap");
-      router.refresh();
     }
   }
 
