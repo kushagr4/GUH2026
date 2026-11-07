@@ -30,6 +30,18 @@ describe("toCanonicalFinding bridges the #6 validators and fusion to the contrac
       expect(canonical.strength).toBeNull();
       expect(canonical.recommendation?.recommendedStatus).toBe(result.status);
       expect(canonical.recommendation?.reviewPriority).toBe(result.reviewPriority);
+
+      // Supporting evidence is direct support only: never weather context or weak signals.
+      const byId = new Map(
+        scenario.input.findings.map((finding) => {
+          const canonicalInput = toCanonicalFinding(finding, { investigationId: INVESTIGATION, isSynthetic: true });
+          return [canonicalInput.id, canonicalInput] as const;
+        }),
+      );
+      for (const id of canonical.recommendation?.supportingFindingIds ?? []) {
+        expect(byId.get(id)?.assessment, `${scenario.id} supporting ${id}`).toBe("supports");
+      }
+      expect(canonical.recommendation?.supportingFindingIds.length, scenario.id).toBe(result.independentSupportCount);
     }
   });
 
