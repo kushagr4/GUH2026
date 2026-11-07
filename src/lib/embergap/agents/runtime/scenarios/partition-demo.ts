@@ -123,7 +123,44 @@ export type PartitionDemoResult = {
   records: { observations: Observation[]; findings: AgentFinding[]; events: AgentEvent[] } | null;
   /** The merged timeline, trimmed to what a dashboard shows. */
   timeline: TimelineEntry[];
+  /** The demo's story in order, for a dashboard to step through. Only stages the run reached. */
+  stages: DemoStage[];
 };
+
+export type DemoStage = {
+  stage: "connected" | "partitioned" | "working_in_isolation" | "reconnected" | "reconciled";
+  /** Simulated milliseconds. */
+  atMs: number;
+  detail: string;
+};
+
+/** Builds the five stages from the run's own phase summaries and reconciliation. */
+export function demoStages(phases: readonly PhaseSummary[], reconciliation: Reconciliation | null, settledAtMs: number | null): DemoStage[] {
+  const stages: DemoStage[] = [];
+  const sum = (counts: Record<string, number>) => Object.values(counts).reduce((total, value) => total + value, 0);
+  const [connected, partitioned] = phases;
+  if (connected) {
+    stages.push({ stage: "connected", atMs: connected.startMs, detail: `All agents connected. Each works through its own queue: ${sum(connected.tasksCompleted)} task(s) finished and shared.` });
+  }
+  if (partitioned) {
+    stages.push({ stage: "partitioned", atMs: partitioned.startMs, detail: `Network split: ${DEMO_PARTITION.map((group) => group.join(" + ")).join(" | ")}. No agent is paused.` });
+    const blocked = partitioned.blockedTasks.map((task) => task.taskId.split(":").slice(1).join(":"));
+    stages.push({
+      stage: "working_in_isolation",
+      atMs: partitioned.startMs,
+      detail: `${sum(partitioned.tasksCompleted)} task(s) finished on both sides while cut off; agents hold different evidence (${new Set(Object.values(partitioned.historyHashes)).size} distinct histories).${blocked.length ? ` Waiting for evidence from across the cut: ${blocked.join(", ")}.` : ""}`,
+    });
+    if (phases.length > 2) stages.push({ stage: "reconnected", atMs: partitioned.endMs, detail: "Links restored. Agents exchange digests and send each other what is missing." });
+  }
+  if (reconciliation && settledAtMs !== null) {
+    stages.push({
+      stage: "reconciled",
+      atMs: settledAtMs,
+      detail: `Every agent holds the same history. ${reconciliation.redelivered} event(s) caught up, ${reconciliation.duplicatesIgnored} duplicate(s) ignored, and fusion re-ran on the full evidence.`,
+    });
+  }
+  return stages;
+}
 
 const scenario = (id: (typeof SYNTHETIC_SCENARIOS)[number]["id"]) => {
   const found = SYNTHETIC_SCENARIOS.find((item) => item.id === id);
@@ -397,5 +434,6 @@ export async function runPartitionDemo(options: PartitionDemoOptions = {}): Prom
     network: final.network,
     records: contents ? { observations: contents.observations, findings: contents.findings, events: contents.events } : null,
     timeline,
+    stages: demoStages(phases, final.reconciliations[0] ?? null, settledAtMs),
   };
 }
