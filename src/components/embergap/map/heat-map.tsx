@@ -17,9 +17,19 @@ import {
   type Size,
 } from "./projection";
 
-/** OpenStreetMap tiles: presentation only, with attribution. Offline, the heat layer still draws. */
+/**
+ * OpenStreetMap tiles: keyless, presentation only, with attribution. Tiles are
+ * only ever scaled down (see tilesFor), which keeps them sharp. Offline, the
+ * heat layer still draws.
+ */
 const TILE_TEMPLATE = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
 const HIT_RADIUS = 28;
+/** Zoom levels per wheel delta unit: a mouse notch (~100) is about 0.6 levels. */
+const WHEEL_ZOOM_PER_UNIT = 1 / 160;
+/** Trackpad pinch deltas are small, so they get a much larger factor. */
+const PINCH_ZOOM_PER_UNIT = 1 / 40;
+/** Touch pinch: zoom faster than the finger ratio alone. */
+const TOUCH_PINCH_GAIN = 1.6;
 const CONTROL = "size-8 text-base leading-none hover:bg-muted";
 const SETTLE_MS = 500;
 
@@ -42,11 +52,42 @@ function weightOf(feature: MapFeature): number {
   return feature.freshness === "available" ? base : base * 0.5;
 }
 
-/** Heat radius in screen px: the real-world uncertainty, never smaller than a readable blob. */
+/** Heat radius in screen px: wide enough that nearby evidence blends, never smaller than readable. */
 function radiusOf(feature: MapFeature, metresPerPx: number): number {
-  const metres = feature.kind === "investigation" ? feature.location.precisionMeters * 1.5 : 1_200;
-  const min = feature.kind === "investigation" ? 28 : 18;
-  return Math.min(220, Math.max(min, metres / metresPerPx));
+  const metres = feature.kind === "investigation" ? feature.location.precisionMeters * 2.5 : 2_000;
+  const min = feature.kind === "investigation" ? 44 : 28;
+  return Math.min(320, Math.max(min, metres / metresPerPx));
+}
+
+/** A stable 32-bit hash, so each feature's heat shape is the same on every render. */
+function hashOf(text: string): number {
+  let hash = 2_166_136_261;
+  for (let i = 0; i < text.length; i += 1) hash = Math.imul(hash ^ text.charCodeAt(i), 16_777_619);
+  return hash >>> 0;
+}
+
+type Kernel = { x: number; y: number; r: number; weight: number };
+
+/**
+ * A soft centre plus a few offset lobes, so heat spreads unevenly instead of
+ * as a perfect disc. Lobes stay within the feature's own heat radius.
+ */
+function kernelsFor(feature: MapFeature, x: number, y: number, r: number): Kernel[] {
+  const weight = weightOf(feature);
+  const seed = hashOf(feature.id);
+  const lobes = feature.kind === "investigation" ? 4 : 3;
+  const kernels: Kernel[] = [{ x, y, r, weight: weight * 0.7 }];
+  for (let i = 0; i < lobes; i += 1) {
+    const angle = (seed % 628) / 100 + (i / lobes) * Math.PI * 2 + (((seed >>> (i * 4)) & 7) - 3.5) * 0.15;
+    const distance = r * (0.18 + (((seed >>> (i * 5 + 3)) & 15) / 15) * 0.22);
+    kernels.push({
+      x: x + Math.cos(angle) * distance,
+      y: y + Math.sin(angle) * distance,
+      r: r * (0.55 + (((seed >>> (i * 3 + 7)) & 7) / 7) * 0.2),
+      weight: weight * 0.35,
+    });
+  }
+  return kernels;
 }
 
 let palette: Uint8ClampedArray | null = null;
@@ -70,33 +111,38 @@ function heatPalette(): Uint8ClampedArray {
   return palette;
 }
 
-function drawHeat(canvas: HTMLCanvasElement, points: Array<{ x: number; y: number; r: number; weight: number }>) {
+/** Opacity per intensity: rises gently from 0, so edges fade out instead of ending in a ring. */
+const OPACITY = Array.from({ length: 256 }, (_, i) => Math.round(Math.min(200, 255 * (i / 255) ** 0.85)));
+
+function drawHeat(canvas: HTMLCanvasElement, kernels: Kernel[]) {
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
   if (!ctx) return;
   const { width, height } = canvas;
   ctx.clearRect(0, 0, width, height);
-  if (points.length === 0) return;
-  for (const point of points) {
-    const gradient = ctx.createRadialGradient(point.x, point.y, 0, point.x, point.y, point.r);
-    gradient.addColorStop(0, `rgba(0,0,0,${point.weight})`);
+  if (kernels.length === 0) return;
+  for (const kernel of kernels) {
+    const { x, y, r, weight } = kernel;
+    const gradient = ctx.createRadialGradient(x, y, 0, x, y, r);
+    // Gaussian-like falloff: a dense core that thins out smoothly.
+    gradient.addColorStop(0, `rgba(0,0,0,${weight})`);
+    gradient.addColorStop(0.25, `rgba(0,0,0,${weight * 0.78})`);
+    gradient.addColorStop(0.5, `rgba(0,0,0,${weight * 0.4})`);
+    gradient.addColorStop(0.75, `rgba(0,0,0,${weight * 0.12})`);
     gradient.addColorStop(1, "rgba(0,0,0,0)");
     ctx.fillStyle = gradient;
-    ctx.fillRect(point.x - point.r, point.y - point.r, point.r * 2, point.r * 2);
+    ctx.fillRect(x - r, y - r, r * 2, r * 2);
   }
   const image = ctx.getImageData(0, 0, width, height);
   const data = image.data;
   const colours = heatPalette();
   for (let i = 0; i < data.length; i += 4) {
-    const alpha = data[i + 3]!;
-    if (alpha < 8) {
-      data[i + 3] = 0;
-      continue;
-    }
-    const offset = alpha * 4;
+    const intensity = data[i + 3]!;
+    if (intensity === 0) continue;
+    const offset = intensity * 4;
     data[i] = colours[offset]!;
     data[i + 1] = colours[offset + 1]!;
     data[i + 2] = colours[offset + 2]!;
-    data[i + 3] = Math.min(215, 50 + alpha);
+    data[i + 3] = OPACITY[intensity]!;
   }
   ctx.putImageData(image, 0, 0);
 }
@@ -171,9 +217,11 @@ export function HeatMap({
       const { camera: current, size: currentSize } = latest.current;
       if (!current || !currentSize) return;
       const rect = element.getBoundingClientRect();
-      const delta = event.deltaMode === 1 ? event.deltaY * 16 : event.deltaY;
+      const delta = event.deltaMode === 1 ? event.deltaY * 16 : event.deltaMode === 2 ? event.deltaY * 400 : event.deltaY;
+      // Trackpad pinches arrive as ctrl+wheel with small deltas; a mouse notch is about 100.
+      const step = Math.max(-1, Math.min(1, -delta * (event.ctrlKey ? PINCH_ZOOM_PER_UNIT : WHEEL_ZOOM_PER_UNIT)));
       setCamera(
-        zoomAround(current, currentSize, current.zoom - delta * 0.0025, {
+        zoomAround(current, currentSize, current.zoom + step, {
           x: event.clientX - rect.left,
           y: event.clientY - rect.top,
         }),
@@ -203,7 +251,7 @@ export function HeatMap({
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || !size) return;
-    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const width = Math.round(size.width * dpr);
     const height = Math.round(size.height * dpr);
     if (canvas.width !== width) canvas.width = width;
@@ -212,7 +260,7 @@ export function HeatMap({
       canvas,
       screen
         .filter((p) => p.x > -p.r && p.y > -p.r && p.x < size.width + p.r && p.y < size.height + p.r)
-        .map((p) => ({ x: p.x * dpr, y: p.y * dpr, r: p.r * dpr, weight: weightOf(p.feature) })),
+        .flatMap((p) => kernelsFor(p.feature, p.x * dpr, p.y * dpr, p.r * dpr)),
     );
   }, [screen, size]);
 
@@ -268,7 +316,14 @@ export function HeatMap({
     if (current?.kind === "pinch" && size && pointers.current.size === 2) {
       const [a, b] = [...pointers.current.values()] as [Point, Point];
       const distance = Math.hypot(a.x - b.x, a.y - b.y);
-      setCamera(zoomAround(current.camera, size, current.camera.zoom + Math.log2(distance / current.startDistance), current.mid));
+      setCamera(
+        zoomAround(
+          current.camera,
+          size,
+          current.camera.zoom + TOUCH_PINCH_GAIN * Math.log2(distance / current.startDistance),
+          current.mid,
+        ),
+      );
       return;
     }
     if (event.pointerType === "mouse") {
@@ -359,7 +414,7 @@ export function HeatMap({
             aria-hidden
             draggable={false}
             referrerPolicy="strict-origin-when-cross-origin"
-            className="pointer-events-none absolute max-w-none grayscale-[60%] dark:opacity-70 dark:invert dark:hue-rotate-180"
+            className="pointer-events-none absolute max-w-none dark:opacity-80 dark:invert dark:hue-rotate-180"
             style={{ left: tile.x, top: tile.y, width: tile.size, height: tile.size }}
             onError={() => setFailedTiles((previous) => new Set(previous).add(tile.key))}
           />
