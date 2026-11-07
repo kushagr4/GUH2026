@@ -33,6 +33,8 @@ describe("git guard: merging and approving are always a person's job", () => {
     "gh api repos/kushagr4/GUH2026/pulls/12/reviews -f event=APPROVE",
     "gh api graphql -f query='mutation { mergePullRequest(input: {}) { clientMutationId } }'",
     "SKIP_GIT_GUARD=1 gh pr merge 3",
+    `gh pr comment 1 -b 'he said "ok' && gh pr merge 1 && echo "done"`,
+    `echo "it's fine" && gh pr merge 1 && echo 'ok'`,
   ])("denies %s", (command) => {
     expect(decision(command, context("chore/x", true))).toBe("deny");
   });
@@ -151,12 +153,16 @@ describe("git guard hook protocol", () => {
 
 describe("the review marker, end to end in a throwaway repository", () => {
   let repo: string;
+  let emptyConfig: string;
   const sh = (args: string[]) => {
     const result = spawnSync("git", args, {
       cwd: repo,
       encoding: "utf8",
       env: {
         ...process.env,
+        // Ignore the developer's own git config (signing, global hooks, templates).
+        GIT_CONFIG_GLOBAL: emptyConfig,
+        GIT_CONFIG_NOSYSTEM: "1",
         GIT_AUTHOR_NAME: "Test",
         GIT_AUTHOR_EMAIL: "test@example.com",
         GIT_COMMITTER_NAME: "Test",
@@ -175,6 +181,8 @@ describe("the review marker, end to end in a throwaway repository", () => {
 
   beforeAll(() => {
     repo = mkdtempSync(join(tmpdir(), "guh-guard-"));
+    emptyConfig = join(mkdtempSync(join(tmpdir(), "guh-gitconfig-")), "config");
+    writeFileSync(emptyConfig, "");
     sh(["init", "-q", "-b", "main"]);
     commit("a.txt", "one\n");
     sh(["update-ref", "refs/remotes/origin/main", "HEAD"]);

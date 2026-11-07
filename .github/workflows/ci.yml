@@ -56,13 +56,15 @@ jobs:
         run: npm ci
 
       - name: Validate PR title (Conventional Commits)
-        if: ${{ !cancelled() && steps.install.outcome == 'success' && github.event_name == 'pull_request' }}
+        # No dependencies, so it runs even if npm ci failed.
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: node scripts/check-commits.mjs --title "$PR_TITLE"
 
       - name: Check commit messages (advisory, squash-merge replaces them)
-        if: ${{ !cancelled() && steps.install.outcome == 'success' && github.event_name == 'pull_request' }}
+        # No dependencies, so it runs even if npm ci failed.
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}

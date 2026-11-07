@@ -134,7 +134,8 @@ function main() {
       const base = git(["merge-base", "origin/main", "HEAD"]);
       if (!base.ok || !base.out.trim()) {
         console.log("Can't find where this branch left origin/main. Run `git fetch origin main`, then try again.");
-        process.exit(1);
+        // Advisory means advisory: say what's missing, but don't fail the run.
+        process.exit(args.advisory ? 0 : 1);
       }
       range = `${base.out.trim()}..HEAD`;
     }

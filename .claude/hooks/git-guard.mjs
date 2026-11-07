@@ -15,7 +15,9 @@
 // LIMITS: this reads command text; it doesn't run a shell parser. Quoted text,
 // here-strings and heredoc bodies are treated as data, so a commit message that
 // mentions `gh pr merge` isn't blocked. A command hidden inside `bash -c "..."`
-// or a script file isn't seen. GitHub itself can't enforce reviews on this
+// or a script file isn't seen. The current branch and the review marker are read
+// from the session's working directory, not from a `cd` or `git -C` inside the
+// command; an explicit push to main is denied either way. GitHub itself can't enforce reviews on this
 // repo's plan (docs/ci-and-reviews.md), so this guards Claude, not people.
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -26,17 +28,41 @@ const SKIP = /^\s*(?:SKIP_GIT_GUARD=1\s|\$env:SKIP_GIT_GUARD\s*=\s*["']?1["']?\s
 
 /** Blanks out quoted strings, here-strings and heredoc bodies, which are data. */
 export function stripQuoted(command) {
-  return (
+  return blankQuotes(
     command
       // PowerShell here-strings: @' ... '@ and @" ... "@, closed at the start of a line.
       .replace(/@'[\s\S]*?\n'@/g, "''")
       .replace(/@"[\s\S]*?\n"@/g, '""')
       // Bash heredocs: everything up to the closing delimiter line.
       .replace(/<<-?\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\1[^\n]*\n[\s\S]*?\n\s*\2[ \t]*(?=\n|$)/g, "<<HEREDOC")
-      .replace(/"(?:[^"\\]|\\.)*"/g, '""')
-      // An apostrophe after a letter is part of a word (don't), not a quote.
-      .replace(/(^|[^A-Za-z0-9_])'[^']*'/g, "$1''")
+      .replace(/^[\s\S]*$/, blankQuotes)
   );
+}
+
+/**
+ * One left-to-right pass, so a quote character inside the other kind of quote
+ * stays data: `'he said "ok'` must not open a double-quoted span that swallows
+ * the commands after it. An unclosed quote leaves the rest visible.
+ */
+function blankQuotes(text) {
+  let out = "";
+  let i = 0;
+  while (i < text.length) {
+    const char = text[i];
+    // An apostrophe after a letter is part of a word (don't), not a quote.
+    const single = char === "'" && !(i > 0 && /[A-Za-z0-9_]/.test(text[i - 1]));
+    if (char === '"' || single) {
+      let j = i + 1;
+      while (j < text.length && text[j] !== char) j += char === '"' && text[j] === "\\" ? 2 : 1;
+      if (j >= text.length) return out + text.slice(i);
+      out += char + char;
+      i = j + 1;
+      continue;
+    }
+    out += char;
+    i++;
+  }
+  return out;
 }
 
 /** Splits a command line into simple commands, each as a list of words. */

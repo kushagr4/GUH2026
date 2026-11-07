@@ -84,7 +84,13 @@ async function main() {
     console.log(`PR #${number} is ${pr.state}; nothing to report.`);
     return;
   }
-  const reviews = await github(`/repos/${repo}/pulls/${number}/reviews?per_page=100`);
+  // Oldest first, every page: the latest verdict may be past the first 100.
+  const reviews = [];
+  for (let page = 1; ; page++) {
+    const batch = await github(`/repos/${repo}/pulls/${number}/reviews?per_page=100&page=${page}`);
+    reviews.push(...batch);
+    if (batch.length < 100) break;
+  }
   const status = decideReviewStatus({
     author: pr.user.login,
     headSha: pr.head.sha,

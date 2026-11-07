@@ -13,6 +13,10 @@ const argv = process.argv.slice(2);
 const skipE2e = argv.includes("--no-e2e");
 const titleIndex = argv.indexOf("--title");
 const title = titleIndex >= 0 ? argv[titleIndex + 1] : undefined;
+if (titleIndex >= 0 && (title === undefined || title.startsWith("--"))) {
+  console.log('--title needs a value, for example: npm run preflight -- --title "feat(auth): add sign-in"');
+  process.exit(2);
+}
 
 const checks = [
   // Passed as arguments, not through a shell, so any title text is safe.
