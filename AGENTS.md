@@ -7,3 +7,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
 
 <!-- END:nextjs-agent-rules -->
+
+## Workflow, for every coding agent
+
+Follow `CLAUDE.md` and `docs/development-workflow.md`. Work on a branch and open a draft pull request. Never merge or approve a pull request, and never push to `main`: one human approval is required before merging.
