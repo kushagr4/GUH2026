@@ -8,7 +8,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { git } from "./lib.mjs";
 
-const SKIP = /^\\s*(?:SKIP_GIT_GUARD=1\\s|\\$env:SKIP_GIT_GUARD\\s*=\\s*["']?1["']?\\s*;)/;
+const SKIP = /^\s*(?:SKIP_GIT_GUARD=1\s|\$env:SKIP_GIT_GUARD\s*=\s*["']?1["']?\s*;)/;
 
 /** Blanks out quoted strings, here-strings and heredoc bodies, which are data. */
 export function stripQuoted(command) {
