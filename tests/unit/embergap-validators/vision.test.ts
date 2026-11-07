@@ -109,6 +109,23 @@ describe("toVisionFinding guardrails", () => {
     expect(finding.reasonCodes).toContain("vision.unverifiable_claim_stripped");
   });
 
+  it("strips a claim made only in the free-text description", () => {
+    const finding = toVisionFinding(
+      good({ description: "A quiet road. This was photographed on 2026-11-06 near the coast." }),
+      findingCtx,
+      makeDeps(),
+    );
+    expect(finding.reasonCodes).toContain("vision.unverifiable_claim_stripped");
+    expect(finding.explanation).toContain("A quiet road.");
+    expect(finding.explanation).not.toMatch(/2026-11-06|photographed/);
+  });
+
+  it("ignores harmless extra keys without flagging a claim", () => {
+    const finding = toVisionFinding(good({ notes: "extra", model: "x" }), findingCtx, makeDeps());
+    expect(finding.assessment).toBe("contradicts");
+    expect(finding.reasonCodes).toEqual(["vision.no_fire_indicators"]);
+  });
+
   it("does not flag empty claim fields", () => {
     const finding = toVisionFinding(good({ claimedLocation: "", claimedTime: null }), findingCtx, makeDeps());
     expect(finding.reasonCodes).not.toContain("vision.unverifiable_claim_stripped");
