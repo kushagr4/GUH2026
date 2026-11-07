@@ -9,3 +9,16 @@ export {
   STRENGTH_RULES,
 } from "./rules";
 export { fuseFindings, isFlaggedForReview } from "./fuse";
+export { FUSION_SCENARIOS, type FusionScenario, type GroundTruth } from "./scenarios";
+export {
+  createDeterministicDeps,
+  evaluateScenarios,
+  fusionStrategy,
+  singleSourceBaseline,
+  type EvaluationCounts,
+  type EvaluationReport,
+  type EvaluationStrategy,
+  type Outcome,
+  type ScenarioResult,
+  type StrategyDecision,
+} from "./evaluate";
