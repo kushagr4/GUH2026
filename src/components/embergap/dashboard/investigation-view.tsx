@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/page-header";
 import {
   SYNTHETIC_NOW,
@@ -32,7 +32,7 @@ import {
   priorityTone,
 } from "./labels";
 import { SCENARIO_PLACE } from "@/lib/embergap/read/regions";
-import { AgentStrip, PartitionTimeline, Provenance } from "./agent-panels";
+import { PartitionTimeline, Provenance } from "./agent-panels";
 import { SafetyNotice } from "./notices";
 import { ToneBadge } from "./tone-badge";
 
@@ -69,6 +69,16 @@ function observationSummary(source: SourceKind, observations: Observation[]): st
   }
 }
 
+/** Agents with their own evidence, in the order a reviewer reads them. Fusion is shown as the recommendation. */
+const SOURCE_AGENTS = ["witness", "vision", "satellite", "weather"] as const;
+
+/** The first sentence (or two, if the first is very short): the headline of an explanation. */
+function headline(text: string): string {
+  const sentences = text.trim().split(/(?<=[.!?])\s+/);
+  const first = sentences[0] ?? "";
+  return first.length < 40 && sentences[1] ? `${first} ${sentences[1]}` : first;
+}
+
 export function InvestigationView({ detail }: { detail: InvestigationDetailResponse }) {
   const { investigation, findings, observations } = detail;
   const now = investigation.isSynthetic ? SYNTHETIC_NOW : detail.generatedAt;
@@ -82,9 +92,11 @@ export function InvestigationView({ detail }: { detail: InvestigationDetailRespo
   const contradictions = (recommendation?.contradictingFindingIds ?? [])
     .map((id) => findingById.get(id))
     .filter((finding) => finding !== undefined);
-  const agentFindings = [...findings]
-    .filter((finding) => finding.agentId !== "fusion")
-    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  // One entry per agent: its latest finding, with earlier ones kept for the details view.
+  const byAgent = SOURCE_AGENTS.map((agent) => {
+    const own = byNewest.filter((finding) => finding.agentId === agent);
+    return { agent, latest: own[0], earlier: own.slice(1) };
+  });
   const timeline = [...detail.events].sort((a, b) => a.occurredAt.localeCompare(b.occurredAt));
   const precisionKm = Math.round(investigation.location.precisionMeters / 100) / 10;
 
@@ -105,8 +117,6 @@ export function InvestigationView({ detail }: { detail: InvestigationDetailRespo
       />
 
       <SafetyNotice />
-
-      <AgentStrip findings={findings} observations={observations} />
 
       <Card className={`border-l-4 ${priorityAccent(recommendation?.reviewPriority ?? investigation.reviewPriority)}`}>
         <CardHeader>
@@ -134,7 +144,7 @@ export function InvestigationView({ detail }: { detail: InvestigationDetailRespo
                   <ul className="mt-1 list-disc pl-5">
                     {contradictions.map((finding) => (
                       <li key={finding.id}>
-                        {ACTOR_LABEL[finding.agentId]}: {finding.explanation}
+                        {ACTOR_LABEL[finding.agentId]}: {headline(finding.explanation)}
                       </li>
                     ))}
                   </ul>
@@ -159,11 +169,14 @@ export function InvestigationView({ detail }: { detail: InvestigationDetailRespo
 
       <PartitionTimeline events={timeline} />
 
-      <section className="flex flex-col gap-3" aria-labelledby="sources-heading">
-        <h2 id="sources-heading" className="text-lg font-semibold">
-          Evidence by source
-        </h2>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      <details className="group flex flex-col gap-3" aria-labelledby="sources-heading">
+        <summary className="cursor-pointer select-none list-none">
+          <h2 id="sources-heading" className="inline text-lg font-semibold">
+            Data sources checked
+          </h2>
+          <span className="ml-2 text-sm text-muted-foreground group-open:hidden">Show</span>
+        </summary>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {detail.sourceAvailability.map((item) => {
             const summary = observationSummary(item.source, observations);
             return (
@@ -188,44 +201,63 @@ export function InvestigationView({ detail }: { detail: InvestigationDetailRespo
             );
           })}
         </div>
-      </section>
+      </details>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <section className="flex flex-col gap-3" aria-labelledby="findings-heading">
           <h2 id="findings-heading" className="text-lg font-semibold">
-            Agent findings
+            What each agent found
           </h2>
-          <ol className="flex flex-col gap-3">
-            {agentFindings.map((finding) => (
-              <li key={finding.id}>
-                <Card size="sm" className={`border-l-4 ${ASSESSMENT_ACCENT[finding.assessment]}`}>
+          <ul className="grid gap-3 sm:grid-cols-2">
+            {byAgent.map(({ agent, latest, earlier }) => (
+              <li key={agent}>
+                <Card size="sm" className={`h-full border-l-4 ${latest ? ASSESSMENT_ACCENT[latest.assessment] : "border-l-muted"}`}>
                   <CardHeader>
                     <CardTitle className="flex flex-wrap items-center gap-2">
-                      <span aria-hidden className={`size-2.5 rounded-full ${ACTOR_DOT[finding.agentId]}`} />
-                      {ACTOR_LABEL[finding.agentId]}
-                      <ToneBadge tone={ASSESSMENT_TONE[finding.assessment]}>
-                        {ASSESSMENT_LABEL[finding.assessment]}
-                        {finding.strength ? ` · ${STRENGTH_LABEL[finding.strength]}` : ""}
-                      </ToneBadge>
+                      <span aria-hidden className={`size-2.5 rounded-full ${ACTOR_DOT[agent]}`} />
+                      {ACTOR_LABEL[agent]}
+                      {latest ? (
+                        <ToneBadge tone={ASSESSMENT_TONE[latest.assessment]}>
+                          {ASSESSMENT_LABEL[latest.assessment]}
+                          {latest.strength ? ` · ${STRENGTH_LABEL[latest.strength]}` : ""}
+                        </ToneBadge>
+                      ) : null}
                     </CardTitle>
-                    <CardDescription>{formatUtc(finding.createdAt)}</CardDescription>
                   </CardHeader>
                   <CardContent className="flex flex-col gap-2 text-sm">
-                    <p>{finding.explanation}</p>
-                    <Provenance finding={finding} observations={observations} />
-                    <p className="text-xs text-muted-foreground">
-                      Reasons: {finding.reasonCodes.map(humanizeCode).join(", ")}
-                    </p>
-                    {finding.limitations.length || finding.limitationNotes.length ? (
-                      <p className="text-xs text-muted-foreground">
-                        Limits: {[...finding.limitations.map(humanizeCode), ...finding.limitationNotes].join("; ")}
-                      </p>
-                    ) : null}
+                    {latest ? (
+                      <>
+                        <p className="text-pretty">{headline(latest.explanation)}</p>
+                        <details className="text-xs text-muted-foreground">
+                          <summary className="cursor-pointer select-none">Details</summary>
+                          <div className="mt-2 flex flex-col gap-1.5">
+                            <p className="text-foreground/80">{latest.explanation}</p>
+                            <Provenance finding={latest} observations={observations} />
+                            <p>Reasons: {latest.reasonCodes.map(humanizeCode).join(", ")}</p>
+                            {latest.limitations.length || latest.limitationNotes.length ? (
+                              <p>Limits: {[...latest.limitations.map(humanizeCode), ...latest.limitationNotes].join("; ")}</p>
+                            ) : null}
+                            <p>Reported {formatUtc(latest.createdAt)}</p>
+                            {earlier.length ? (
+                              <ul className="list-disc pl-4">
+                                {earlier.map((finding) => (
+                                  <li key={finding.id}>
+                                    {formatUtc(finding.createdAt)}: {ASSESSMENT_LABEL[finding.assessment]}, {headline(finding.explanation)}
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : null}
+                          </div>
+                        </details>
+                      </>
+                    ) : (
+                      <p className="text-muted-foreground">No finding yet.</p>
+                    )}
                   </CardContent>
                 </Card>
               </li>
             ))}
-          </ol>
+          </ul>
         </section>
 
         <aside className="flex flex-col gap-6">
