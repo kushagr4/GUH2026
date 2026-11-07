@@ -632,15 +632,19 @@ export const EVIDENCE_STRENGTHS = ["weak", "moderate", "strong"] as const;
 export const evidenceStrengthSchema = z.enum(EVIDENCE_STRENGTHS);
 export type EvidenceStrength = z.infer<typeof evidenceStrengthSchema>;
 
-const VERDICT_WORDS = /(^|_)(confirm|confirmed|confirms|verified|verify|authentic|certain|certainty|probability|percent|proof|proven)(_|$)/;
+const VERDICT_WORDS =
+  /(^|[_.])(confirm|confirmed|confirms|verified|verify|authentic|certain|certainty|probability|percent|proof|proven)([_.]|$)/;
 
 /**
- * snake_case, so codes stay machine-readable. Prefer the well-known codes below.
- * Codes that claim a verdict ("fire_confirmed", "image_authentic") are rejected.
+ * snake_case, optionally namespaced by agent ("witness.single_report"), so codes
+ * stay machine-readable. Prefer the well-known codes below. Codes that claim a
+ * verdict ("fire_confirmed", "vision.image_authentic") are rejected.
  */
 export const reasonCodeSchema = z
   .string()
-  .regex(/^[a-z][a-z0-9_]{1,63}$/, "Use a snake_case reason code.")
+  .max(64)
+  .regex(/^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)?$/, "Use a snake_case reason code, optionally agent-namespaced.")
+  .refine((code) => code.length >= 2, { message: "Use a snake_case reason code." })
   .refine((code) => !VERDICT_WORDS.test(code), { message: "Reason codes describe evidence; they never claim a verdict." });
 
 /** Well-known reason codes. Agents may add their own snake_case codes. */
@@ -674,6 +678,11 @@ export const LIMITATION_CODES = [
   "low_spatial_precision",
   "possible_shared_origin",
   "model_output_uncalibrated",
+  "model_output_invalid",
+  "unverifiable_claim_removed",
+  "description_withheld",
+  "human_report_unverified",
+  "heuristic_thresholds_uncalibrated",
   "synthetic_data",
 ] as const;
 export const limitationCodeSchema = z.enum(LIMITATION_CODES);
@@ -688,8 +697,11 @@ export const VISION_REQUIRED_LIMITATIONS = [
 
 /** The fusion agent's advice to a human. It can never mark anything reviewed or confirmed. */
 export const fusionRecommendationSchema = z.object({
-  recommendedStatus: z.enum(["needs_human_review", "insufficient_evidence"]),
+  /** "investigating" while evidence is still expected. Never "reviewed". */
+  recommendedStatus: z.enum(["investigating", "needs_human_review", "insufficient_evidence"]),
   reviewPriority: reviewPrioritySchema,
+  /** How many independent source types directly support the report. A count, not a probability. */
+  independentSourceCount: z.number().int().min(0).default(0),
   supportingFindingIds: z.array(idSchema).max(100),
   contradictingFindingIds: z.array(idSchema).max(100),
   /** Plain-language gaps, for example "No FIRMS pass since 09:00 UTC". */
@@ -697,6 +709,8 @@ export const fusionRecommendationSchema = z.object({
   possibleDuplicateReportIds: z.array(idSchema).max(50),
 });
 export type FusionRecommendation = z.infer<typeof fusionRecommendationSchema>;
+/** What producers may send: defaulted fields are optional. */
+export type FusionRecommendationInput = z.input<typeof fusionRecommendationSchema>;
 
 export const agentFindingSchema = z
   .object({
@@ -720,6 +734,8 @@ export const agentFindingSchema = z
     /** Plain language, shown to reviewers. Treat as untrusted text when rendering. */
     explanation: z.string().trim().min(1).max(2_000),
     limitations: z.array(limitationCodeSchema).max(20),
+    /** Agent-specific caveats in plain language, shown beside the codes. */
+    limitationNotes: z.array(z.string().trim().min(1).max(300)).max(10).default([]),
     /** Required for the fusion agent, null for everyone else. */
     recommendation: fusionRecommendationSchema.nullable(),
     isSynthetic: z.boolean(),
@@ -790,6 +806,8 @@ export const agentFindingSchema = z
     }
   });
 export type AgentFinding = z.infer<typeof agentFindingSchema>;
+/** What producers may send: reportId and limitationNotes may be omitted. */
+export type AgentFindingInput = z.input<typeof agentFindingSchema>;
 
 /* -------------------------------------------------------------------------- */
 /* Agent-to-agent messages                                                    */

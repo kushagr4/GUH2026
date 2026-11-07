@@ -344,6 +344,7 @@ describe("agent findings encode the scientific limits", () => {
     const recommendation: FusionRecommendation = {
       recommendedStatus: "needs_human_review",
       reviewPriority: "high",
+      independentSourceCount: 1,
       supportingFindingIds: [ID(10)],
       contradictingFindingIds: [],
       evidenceGaps: ["No FIRMS pass since 09:00 UTC"],
@@ -361,6 +362,7 @@ describe("agent findings encode the scientific limits", () => {
     const recommendation: FusionRecommendation = {
       recommendedStatus: "needs_human_review",
       reviewPriority: "medium",
+      independentSourceCount: 0,
       supportingFindingIds: [],
       contradictingFindingIds: [],
       evidenceGaps: [],
@@ -404,6 +406,18 @@ describe("agent findings encode the scientific limits", () => {
     for (const code of ["fire_confirmed", "image_authentic", "location_verified", "fire_probability_high"]) {
       expect(agentFindingSchema.safeParse(finding({ reasonCodes: [code] })).success, code).toBe(false);
     }
+  });
+
+  it("accepts agent-namespaced reason codes, but not namespaced verdicts", () => {
+    expect(agentFindingSchema.safeParse(finding({ reasonCodes: ["witness.single_report"] })).success).toBe(true);
+    expect(agentFindingSchema.safeParse(finding({ reasonCodes: ["vision.image_authentic"] })).success).toBe(false);
+    expect(agentFindingSchema.safeParse(finding({ reasonCodes: ["witness.a.b"] })).success).toBe(false);
+  });
+
+  it("keeps plain-language caveats beside the limitation codes", () => {
+    const parsed = agentFindingSchema.parse(finding({ limitationNotes: ["Witness reports are unverified human claims."] }));
+    expect(parsed.limitationNotes).toEqual(["Witness reports are unverified human claims."]);
+    expect(agentFindingSchema.parse(finding()).limitationNotes).toEqual([]);
   });
 
   it("requires snake_case reason codes", () => {
