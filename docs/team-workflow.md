@@ -6,11 +6,7 @@ Each teammate has their own local Supabase in Docker (see [docker-development.md
 
 Everyone has their own branch, dev server, local Supabase and `.env.local`, so this work can't disturb anyone else.
 
-1. `git switch -c feature/short-name`
-2. Build it, and commit small.
-3. Run `npm run validate` before opening a PR if you changed anything risky.
-4. Open a PR. CI runs lint, types, tests, the migration lint, the secret scan, the build and the smoke tests.
-5. Merge quickly. Keep `main` demoable at all times.
+Every change goes through a focused branch and a pull request that needs green **PR Checks** and one approval from someone other than its author. The steps are in [development-workflow.md](development-workflow.md). Keep `main` demoable at all times.
 
 ## Migration ownership
 
@@ -28,7 +24,7 @@ Everyone has their own branch, dev server, local Supabase and `.env.local`, so t
 
 To hand over, change `supabase/MIGRATION_OWNER` in a PR, invite the new owner to the Supabase organisation, and have them run the first three steps of [supabase-setup.md](supabase-setup.md).
 
-`.github/CODEOWNERS` requests the owner's review for `supabase/`. GitHub doesn't enforce required reviews on private repos on the free plan, so treat that as a team rule.
+`.github/CODEOWNERS` names the owner as the reviewer for `supabase/`. GitHub can't enforce reviews on this private repo's plan, and may not request them automatically, so request the owner by hand and treat it as a team rule ([ci-and-reviews.md](ci-and-reviews.md#the-review-rule)).
 
 ## Changing the schema
 
@@ -37,7 +33,8 @@ To hand over, change `supabase/MIGRATION_OWNER` in a PR, invite the new owner to
 3. **Try it locally:** `npm run local:migrate`, then `npm run local:types`. Check it in the app, in Studio (<http://127.0.0.1:54323>) and with `npm run local:test`.
 4. **Check it:** `npm run db:lint`
 5. **Open a PR** containing only that migration, the regenerated types and the code that needs it.
-6. **The owner reviews and merges,** then applies it to the hosted project and checks that the hosted types match:
+6. **The owner reviews it** (or, for the owner's own migration, a teammate does), and it's merged once approved.
+7. **The owner applies it to the hosted project** from an up-to-date `main`, then checks that the hosted types match. `db:push` refuses to run anywhere else:
 
 ```bash
 git switch main
@@ -59,8 +56,31 @@ npm run db:push
 npm run db:types -- --check
 ```
 
-   The check compares the schema, not formatting, so types generated locally pass. If it fails, the hosted schema differs from the migrations: run `npm run db:types` and commit the result.
-7. **Teammates pull.** Their next `npm run local:dev` applies the new migration to their own database.
+   The check compares the schema, not formatting, so types generated locally pass, and usually nothing more is needed. If it fails, the hosted schema differs from the migrations.
+8. **If the types check failed, the owner opens a PR with regenerated types**, like any other change, rather than pushing to `main`:
+
+```bash
+npm run db:types
+```
+
+```bash
+git switch -c chore/db-types
+```
+
+```bash
+git commit -am "chore(db): update generated types"
+```
+
+```bash
+git push -u origin HEAD
+```
+
+```bash
+gh pr create --draft --fill
+```
+
+   A teammate approves it quickly.
+9. **Teammates pull.** Their next `npm run local:dev` applies the new migration to their own database.
 
 ### Keeping your code working until the migration lands
 

@@ -1,67 +1,153 @@
 name: CI
 
+# One job, "PR Checks", runs every check in one checkout and one npm ci. Every
+# check runs even after an earlier one fails (`!cancelled()`), so a single run
+# reports every failure, and the job fails if any check did.
+# What runs and why: docs/ci-and-reviews.md
+
 on:
+  pull_request:
+    branches: [main]
+    # `edited` re-runs the checks after a title change, because the title becomes
+    # the squash-merge commit on main. It also fires on description edits.
+    types: [opened, synchronize, reopened, edited]
   push:
     branches: [main]
-  pull_request:
   workflow_dispatch:
+    inputs:
+      hosted:
+        description: Also run the hosted tests against the shared Supabase project
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  # Cancel superseded runs of a PR. Each commit on main gets a full result.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  verify:
-    name: Lint, types, tests, build
+  pr-checks:
+    name: PR Checks
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      # Placeholders let the build run with no secrets. The app reports itself as
-      # "not configured" with these values.
+      # Placeholders let the build and the smoke tests run with no secrets. The
+      # app reports itself as "not configured" with these values.
       NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: placeholder
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check out the code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0 # The secret scan reads the full history.
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+          # The secret scan reads all history, and the commit check walks the PR's commits.
+          fetch-depth: 0
+
+      - name: Set up Node.js from .nvmrc
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
           cache: npm
-      - run: npm ci
-      - run: npm run lint
-      - run: npm run typecheck
-      - run: npm test
-      - run: npm run db:lint
-      - run: npm run secrets:scan
-      - run: npm run build
-      - run: npm run check:bundle
-      - run: npx playwright install --with-deps chromium
-      - name: End-to-end smoke tests
+
+      - name: Install dependencies
+        id: install
+        run: npm ci
+
+      - name: Validate PR title (Conventional Commits)
+        # No dependencies, so it runs even if npm ci failed.
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: node scripts/check-commits.mjs --title "$PR_TITLE"
+
+      - name: Check commit messages (advisory, squash-merge replaces them)
+        # No dependencies, so it runs even if npm ci failed.
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node scripts/check-commits.mjs --range "$BASE_SHA..$HEAD_SHA" --advisory
+
+      - name: Validate workflow files
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm run check:workflows
+
+      - name: ESLint
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm run lint
+
+      - name: TypeScript
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm run typecheck
+
+      - name: Unit tests
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm test
+
+      - name: Migration lint
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm run db:lint
+
+      - name: Secret scan (files and history)
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm run secrets:scan
+
+      - name: Production build
+        id: build
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm run build
+
+      - name: Client bundle scan
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: npm run check:bundle
+
+      # About 30 seconds together. They are the only pre-merge check that /dev
+      # stays hidden in production, that protected pages redirect, and that the
+      # security headers are set, so they stay in the PR job.
+      - name: Install Playwright Chromium
+        id: browser
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: npx playwright install --with-deps chromium
+
+      - name: End-to-end smoke tests (no Supabase)
+        if: ${{ !cancelled() && steps.browser.outcome == 'success' }}
         run: npm run test:e2e
 
   hosted:
-    name: Hosted integration and E2E
-    # Opt-in, because this uses the shared free-plan project and its auth rate limit.
-    # To enable it, add the SUPABASE_TEST_URL and SUPABASE_TEST_PUBLISHABLE_KEY
-    # secrets and set the repository variable RUN_HOSTED_TESTS=true.
-    if: ${{ vars.RUN_HOSTED_TESTS == 'true' && github.event_name != 'pull_request' }}
-    needs: verify
+    name: Hosted integration and E2E (opt-in)
+    # Never on a pull request: everyone shares one free-plan Supabase project and
+    # its auth rate limit. Runs when started by hand with "hosted" ticked, or on
+    # pushes to main when the repository variable RUN_HOSTED_TESTS is "true".
+    # Needs the SUPABASE_TEST_URL and SUPABASE_TEST_PUBLISHABLE_KEY secrets.
+    if: >-
+      ${{ (github.event_name == 'workflow_dispatch' && inputs.hosted) ||
+          (github.event_name == 'push' && vars.RUN_HOSTED_TESTS == 'true') }}
+    needs: pr-checks
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
       SUPABASE_TEST_URL: ${{ secrets.SUPABASE_TEST_URL }}
       SUPABASE_TEST_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_TEST_PUBLISHABLE_KEY }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      - name: Check out the code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node.js from .nvmrc
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
           cache: npm
-      - run: npm ci
-      - run: npm run test:integration
-      - run: npx playwright install --with-deps chromium
-      - run: npm run test:e2e
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Hosted integration tests (auth, RLS, storage, Realtime)
+        run: npm run test:integration
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: End-to-end tests, smoke and hosted journey
+        run: npm run test:e2e

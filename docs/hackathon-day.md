@@ -28,7 +28,7 @@ npm run health
 
 - Sign in to the Supabase dashboard, and confirm the project is active. Free projects pause after a week without activity.
 - Create one demo account per teammate through `/signup`, and record them somewhere private.
-- Add teammates' GitHub accounts to the repo, and send them the two shared values.
+- Add teammates' GitHub accounts to the repo. They don't need any Supabase values: each runs local Supabase. The hosted URL and publishable key go only into Vercel.
 
 Everyone:
 
@@ -37,14 +37,18 @@ git pull
 ```
 
 ```bash
-npm install
+npm ci
 ```
 
 ```bash
-npm run doctor
+npm run local:up
 ```
 
-If you'll run E2E tests, also run `npx playwright install chromium` while you're on good Wi-Fi.
+```bash
+npm run local:status
+```
+
+`local:up` downloads about 1.3 GB of Docker images the first time, so do it at home, not on venue Wi-Fi. Also run `npx playwright install chromium` while you're on good Wi-Fi if you'll run E2E tests.
 
 ## 10:30 to 12:00: at the venue
 
@@ -69,7 +73,7 @@ npm run doctor
 npm run db:new -- core_tables
 ```
 
-3. **Apply it.** Open a PR, have the owner review and merge it, and then the owner runs:
+3. **Apply it.** Open a PR. Once the owner has reviewed and it's merged, the owner runs:
 
 ```bash
 npm run db:plan
@@ -83,12 +87,14 @@ npm run db:push
 npm run db:types
 ```
 
+   Then the owner opens a quick PR with the regenerated types, as in [team-workflow.md](team-workflow.md#changing-the-schema).
+
 4. **Build features in parallel:**
    - Pages go in `src/app/app/<feature>/`, which is protected automatically.
    - Code goes in `src/features/<feature>/`. Copy `src/features/account/` as the pattern.
    - Add navigation in `src/config/site.ts`.
 
-Ask Claude Code to do this directly. `CLAUDE.md` tells it the conventions and security rules.
+Ask Claude Code to do this directly. `CLAUDE.md` tells it the conventions and security rules, and it follows `/feature-dev`: a feature branch, tests, a draft PR and `/self-review`, then a teammate's approval.
 
 ## Building blocks
 
@@ -120,14 +126,14 @@ Commands you'll use most:
 | Situation | Command |
 | --- | --- |
 | Is it the backend or my code? | Open `/dev`, or run `npm run health` |
-| Before merging something risky | `npm run validate` |
+| Before marking a PR ready | `npm run preflight` |
 | New table or column | `npm run db:new -- <name>` |
 | Migration status (owner) | `npm run db:status` |
 | Security check (owner) | `npm run db:audit` |
 
 Working practices:
 
-- Small PRs, merged often. `main` is always demoable.
+- Small PRs, merged often. `main` is always demoable. Every PR needs one approval from a teammate, so review each other's PRs within about 15 minutes. See [development-workflow.md](development-workflow.md).
 - Schema changes are additive, and go through the owner. See [team-workflow.md](team-workflow.md).
 - If something's broken for everyone, check `/dev` first, then the Supabase dashboard.
 - Avoid late, risky changes. Freeze features at about 17:00.

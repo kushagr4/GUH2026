@@ -40,7 +40,9 @@ src/lib/
   integrations/     External APIs: createApiClient, env checks, errors, ElevenLabs, n8n, Firecrawl, GitHub
   rate-limit.ts     In-memory limiter shared by AI and integrations
 supabase/migrations/  The only source of schema truth
-scripts/            Node scripts with no dependencies. No shell-specific syntax
+scripts/            Node scripts, no shell-specific syntax. Only check-workflows.mjs uses a package (yaml)
+.github/            CI (ci.yml, one "PR Checks" job), review status, PR template, CODEOWNERS
+.claude/            Skills (feature-dev, bugfix, self-review), helper agents, git guard hook
 tests/unit/         Mocked, no network. Runs everywhere
 tests/integration/  Real Supabase (local via local:test, or hosted), disposable users
 e2e/                Playwright. smoke needs no backend, the signed-in journey needs SUPABASE_TEST_*
@@ -95,6 +97,8 @@ e2e/                Playwright. smoke needs no backend, the signed-in journey ne
 | `test:integration` | RLS, auth, storage and Realtime tests against whatever `SUPABASE_TEST_*` points at (hosted via `.env.test.local`) |
 | `test:e2e` | Playwright. Signed-in journeys skip without `SUPABASE_TEST_*` |
 | `validate` | Everything that runs without the hosted project, including the build |
+| `preflight` | What CI's PR Checks job runs, in order, with a summary. Run before marking a PR ready |
+| `check:workflows`, `check:commits` | GitHub Actions workflow lint; Conventional Commit check of this branch's commits |
 | `doctor`, `health` | Machine setup and project health |
 | `db:new`, `db:lint` | Create and check migrations (anyone) |
 | `db:status`, `db:plan`, `db:push`, `db:types`, `db:audit`, `db:sweep-tests`, `env:share`, `env:test` | Hosted operations (migration owner) |
@@ -106,6 +110,18 @@ e2e/                Playwright. smoke needs no backend, the signed-in journey ne
 
 Supabase CLI v3 targets the local stack by default, and hosted commands need `--remote`. The `local:*` and `db:*` scripts handle this. Prefer them over calling the CLI directly.
 
+## Workflow: branches, PRs and reviews
+
+Every change reaches `main` through a focused PR with green **PR Checks** and one approval from someone other than its author. Details: `docs/development-workflow.md` and `docs/ci-and-reviews.md`.
+
+- **Building or changing behaviour?** Follow `/feature-dev` (`.claude/skills/feature-dev/SKILL.md`) before writing code. **Fixing a bug?** Follow `/bugfix`. Scale both to the change: a trivial edit needs no helper agents.
+- **Branches:** `feat/<issue>-<name>`, `fix/<issue>-<name>`, `refactor/<issue>-<name>` or `chore/<name>`, from an up-to-date `main`. GitHub Issues are the tickets; drop the number when there's none. Never work on `main`.
+- **Commits and PR titles** are Conventional Commits: `type(scope): lowercase description`, with no full stop. CI fails on a bad PR title, because it becomes the squash commit.
+- **Draft first.** Open PRs with `gh pr create --draft`. Before `gh pr ready`: tests written, `npm run preflight` passing, and `/self-review` clean of Critical and Important findings. Then request one human reviewer with `gh pr edit --add-reviewer <login>`.
+- **Never merge, never approve, never push to `main`.** That's a person's job. `.claude/hooks/git-guard.mjs` denies `gh pr merge`, approvals, pushes to `main`, and `gh pr ready` before `/self-review` has passed for exactly the branch's diff. Never use `SKIP_GIT_GUARD=1` unless the user asks. After touching a hook, run `npx vitest run tests/unit/git-guard.test.ts`.
+- **GitHub can't enforce the review rule** on this private repo's plan. The "Human review" status is advisory. Never claim reviews are enforced.
+- `/self-review` is Claude's own review. It never replaces the human approval.
+
 ## MCP
 
 `.mcp.json` connects to the official Supabase MCP server, scoped to the shared project in read-only mode. Use it to inspect the schema, logs and advisors. Apply schema changes through migration files and `npm run db:push`, not through MCP.
@@ -113,7 +129,7 @@ Supabase CLI v3 targets the local stack by default, and hosted commands need `--
 ## Hackathon-day practices
 
 - Hacking is short (see `docs/hackathon-day.md`). Keep PRs small and merge often. Keep `main` demoable at all times.
-- Run `npm run validate` before merging anything risky.
+- Run `npm run preflight` before marking a PR ready.
 - Schema changes are additive. Don't rename or drop a column a teammate might be using.
 - Keep the `/dev` pages until the end. They are the fastest way to tell whether a problem is in the infrastructure or in your feature.
 - Before any commit of secrets-adjacent work, run `npm run secrets:scan`.

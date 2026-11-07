@@ -25,7 +25,25 @@
       "mcp__supabase__delete_branch",
       "mcp__supabase__merge_branch",
       "mcp__supabase__reset_branch",
-      "mcp__supabase__rebase_branch"
+      "mcp__supabase__rebase_branch",
+      "Bash(gh pr merge*)",
+      "PowerShell(gh pr merge*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "bash",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/git-guard.mjs\"",
+            "timeout": 30,
+            "statusMessage": "Checking the git guard"
+          }
+        ]
+      }
     ]
   }
 }

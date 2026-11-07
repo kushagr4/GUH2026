@@ -61,7 +61,8 @@ The full guide, covering stopping without losing data, migrations, tests, troubl
 | `npm run dev` | Start only the app, against whatever `.env.local` points at |
 | `npm run doctor` | Check this machine's setup, Docker and the connection to Supabase |
 | `npm run health` | Check that the configured Supabase (local or hosted) is up |
-| `npm run validate` | Lint, types, unit tests, migration lint, secret scan, build and bundle scan |
+| `npm run validate` | Workflow lint, ESLint, types, unit tests, migration lint, secret scan, build and bundle scan |
+| `npm run preflight` | Everything CI's PR Checks runs, including the browser smoke tests, with a summary |
 | `npm test` | Unit tests, fully mocked, no network |
 | `npm run db:new -- <name>` | Create a migration from the secure template |
 | `npm run db:lint` | Check migrations for security and safety problems |
@@ -72,18 +73,22 @@ Running `npm run test:e2e` needs a browser the first time: `npx playwright insta
 
 ## Working as a team
 
-- **Changing the app?** Use a branch and open a pull request as usual. Your dev server, local database and `.env.local` are yours alone.
+- **Changing the app?** Use a `feat/`, `fix/` or `chore/` branch, and open a draft pull request. It needs green **PR Checks** and one approval from a teammate before merging. See [docs/development-workflow.md](docs/development-workflow.md). Your dev server, local database and `.env.local` are yours alone, so your work never affects anyone else until it is merged.
 - **Changing the database?** Write a migration, try it with `npm run local:migrate`, and include it in your PR. Teammates get it on their next `local:dev` after pulling. Only the migration owner applies it to the hosted project. See [docs/team-workflow.md](docs/team-workflow.md).
 - **Never reset the hosted database.** The demo's data lives there. A local reset only touches your own laptop, and still asks you to confirm.
 
 ## More documentation
 
+- [docs/docker-development.md](docs/docker-development.md): local Supabase in Docker, step by step, with troubleshooting
 - [docs/hackathon-day.md](docs/hackathon-day.md): the plan and commands for the day
 - [docs/sponsor-strategy.md](docs/sponsor-strategy.md): judging checklist, sponsor decision matrix and three project concepts
 - [docs/sponsor-comparison.md](docs/sponsor-comparison.md): ElevenLabs, n8n, Firecrawl, Lovable and GitHub compared, with free-tier limits
 - [docs/integrations.md](docs/integrations.md): adding an external API, with timeouts, retries and rate limits
 - [docs/live-verification.md](docs/live-verification.md): live checks and a go/no-go list for ElevenLabs and n8n
-- [docs/team-workflow.md](docs/team-workflow.md): migration ownership, reviews and schema changes
+- [docs/development-workflow.md](docs/development-workflow.md): branches, draft PRs, reviews and merging, step by step
+- [docs/debugging-workflow.md](docs/debugging-workflow.md): reproduce, find the root cause, test, fix
+- [docs/ci-and-reviews.md](docs/ci-and-reviews.md): what CI runs, fixing a red build, and what GitHub can and can't enforce
+- [docs/team-workflow.md](docs/team-workflow.md): migration ownership and schema changes
 - [docs/architecture.md](docs/architecture.md): how the code is organised and why
 - [docs/supabase-setup.md](docs/supabase-setup.md): creating and configuring the hosted project (owner)
 - [docs/free-plan-usage.md](docs/free-plan-usage.md): staying within free limits, health checks and monitoring
