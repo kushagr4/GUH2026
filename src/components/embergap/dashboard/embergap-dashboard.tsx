@@ -197,9 +197,10 @@ export function EmberGapDashboard({
 
         <aside
           aria-label="Evidence in this map view"
+          tabIndex={side ? 0 : undefined}
           className={
             side
-              ? "flex flex-col gap-3 lg:max-h-[min(68vh,700px)] lg:overflow-y-auto"
+              ? "flex max-h-[32rem] min-h-0 flex-col gap-3 overflow-y-auto overscroll-contain rounded-xl [scrollbar-width:none] [&::-webkit-scrollbar]:hidden focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring [&>*]:shrink-0 lg:h-[min(68vh,700px)] lg:max-h-none"
               : "grid items-start gap-3 md:grid-cols-2"
           }
         >
