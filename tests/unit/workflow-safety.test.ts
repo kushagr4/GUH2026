@@ -40,6 +40,15 @@ describe("local and hosted workflows stay separate", () => {
     expect(HOSTED).not.toMatch(/\bdocker\b|["'](start|stop)["']/i);
     expect(HOSTED).not.toMatch(/["']reset["']/);
     expect(HOSTED).not.toMatch(/--include-seed/);
+    expect(HOSTED).toContain("requireMigrationOwner()");
+    expect(HOSTED).toContain('["db", "push", "--remote"]');
+  });
+
+  it("local and hosted commands both exist, under separate names", () => {
+    for (const name of ["local:dev", "local:up", "local:stop", "local:status", "local:reset"]) {
+      expect(scripts[name], name).toContain(`local-supabase.mjs ${name.slice("local:".length)}`);
+    }
+    expect(scripts["db:push"]).toContain("db.mjs push");
   });
 
   it("no package script calls a container runtime directly", () => {
