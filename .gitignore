@@ -32,3 +32,6 @@ next-env.d.ts
 
 # local Claude Code overrides
 .claude/settings.local.json
+
+# /self-review marker, local to each checkout
+.claude/review/
