@@ -55,7 +55,7 @@ npm run doctor
 ```
 
 - During the opening ceremony, fill in the judging checklist in [sponsor-strategy.md](sponsor-strategy.md) and score the decision matrix. Decide on a sponsor by 12:15.
-- Redeem any sponsor credits or codes before 12:00, then turn the sponsor on at `/dev/integrations`. ElevenLabs and n8n are confirmed prizes.
+- Redeem any sponsor credits or codes before 12:00, then turn the sponsor on at `/dev/integrations`. ElevenLabs and n8n are confirmed prizes, but a team may enter **only one** sponsor challenge. Run the chosen one's live check in [live-verification.md](live-verification.md) before 13:00.
 - **ElevenLabs:** only one teammate creates a Free account. Free accounts sharing the venue's IP can be blocked for good, so test from one machine, ideally on a phone hotspot.
 - Agree the idea, who owns which feature, and who is presenting.
 - Confirm who the migration owner is.

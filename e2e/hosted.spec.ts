@@ -180,6 +180,8 @@ test.describe("hosted journey", () => {
     await signIn(page);
     await page.goto("/dev/integrations");
     const list = page.getByTestId("integrations");
+    // Says where the checks run from, because results depend on the environment.
+    await expect(page.getByTestId("runtime")).toContainText("This machine, production build");
     // The E2E server blanks every integration variable, so nothing is spent here.
     for (const id of ["elevenlabs", "n8n", "firecrawl"]) {
       await expect(list.locator(`[data-integration="${id}"]`)).toHaveAttribute("data-state", "off");

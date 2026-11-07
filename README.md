@@ -87,6 +87,7 @@ Running `npm run test:e2e` needs a browser the first time: `npx playwright insta
 - [docs/sponsor-strategy.md](docs/sponsor-strategy.md): judging checklist, sponsor decision matrix and three project concepts
 - [docs/sponsor-comparison.md](docs/sponsor-comparison.md): ElevenLabs, n8n, Firecrawl, Lovable and GitHub compared, with free-tier limits
 - [docs/integrations.md](docs/integrations.md): adding an external API, with timeouts, retries and rate limits
+- [docs/live-verification.md](docs/live-verification.md): live checks and a go/no-go list for ElevenLabs and n8n
 - [docs/team-workflow.md](docs/team-workflow.md): migration ownership, reviews and schema changes
 - [docs/architecture.md](docs/architecture.md): how the code is organised and why
 - [docs/supabase-setup.md](docs/supabase-setup.md): creating and configuring the hosted project (owner)

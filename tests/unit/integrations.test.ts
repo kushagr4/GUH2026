@@ -6,7 +6,12 @@ import {
   elevenLabsStatus,
   getElevenLabs,
 } from "@/lib/integrations/elevenlabs";
-import { readIntegrationEnv } from "@/lib/integrations/env";
+import {
+  describeRuntime,
+  isHostedRuntime,
+  isLocalUrl,
+  readIntegrationEnv,
+} from "@/lib/integrations/env";
 import {
   IntegrationError,
   integrationErrorMessage,
@@ -694,6 +699,29 @@ describe("n8n", () => {
     expect(fetch).toHaveBeenCalledOnce();
   });
 
+  it("accepts n8n's plain-text 'Respond Immediately' reply instead of failing", async () => {
+    const { fetch } = fakeFetch(new Response("Workflow got started", { headers: { "content-type": "text/html" } }));
+    await expect(
+      createN8nClient({ webhookUrl: URL_, secret: SECRET, fetch, sleep }).trigger("x", {}),
+    ).resolves.toBe("Workflow got started");
+  });
+
+  it("refuses a localhost webhook on a hosted deployment, which could never reach it", () => {
+    const local = { N8N_WEBHOOK_URL: "http://localhost:5678/webhook/x", N8N_WEBHOOK_SECRET: SECRET };
+    expect(n8nStatus(local)).toMatchObject({ state: "ready", detail: expect.stringContaining("this machine only") });
+    const hosted = n8nStatus({ ...local, VERCEL: "1" });
+    expect(hosted.state).toBe("invalid");
+    expect(hosted.detail).toContain("hosted deployment can't reach");
+    expect(() => getN8n({ ...local, VERCEL: "1" })).toThrow(expect.objectContaining({ kind: "not_configured" }));
+    // A public n8n URL is fine anywhere.
+    expect(n8nStatus({ N8N_WEBHOOK_URL: URL_, N8N_WEBHOOK_SECRET: SECRET, VERCEL: "1" }).state).toBe("ready");
+  });
+
+  it("warns when the test URL is configured instead of the production URL", () => {
+    const status = n8nStatus({ N8N_WEBHOOK_URL: "https://team.app.n8n.cloud/webhook-test/abc", N8N_WEBHOOK_SECRET: SECRET });
+    expect(status.detail).toContain("test URL");
+  });
+
   it("refuses odd event names", async () => {
     const { fetch } = fakeFetch();
     expect((await caught(createN8nClient({ webhookUrl: URL_, secret: SECRET, fetch, sleep }).trigger("../x", {}))).kind).toBe("bad_request");
@@ -717,6 +745,26 @@ describe("n8n", () => {
     expect(isAuthorizedN8nCallback(call("Bearer wrong"), env)).toBe(false);
     expect(isAuthorizedN8nCallback(call(), env)).toBe(false);
     expect(isAuthorizedN8nCallback(call("Bearer callback-secret-0123456789"), { ...env, N8N_CALLBACK_SECRET: "" })).toBe(false);
+  });
+});
+
+describe("runtime environment", () => {
+  it("tells this machine apart from a hosted deployment", () => {
+    expect(isHostedRuntime({})).toBe(false);
+    expect(isHostedRuntime({ GITHUB_ACTIONS: "true" })).toBe(false);
+    expect(isHostedRuntime({ VERCEL: "1" })).toBe(true);
+    expect(describeRuntime({ NODE_ENV: "development" })).toContain("development server");
+    expect(describeRuntime({ NODE_ENV: "production" })).toContain("production build");
+    expect(describeRuntime({ VERCEL: "1", VERCEL_ENV: "production", VERCEL_REGION: "lhr1" })).toBe(
+      "Hosted on Vercel (production, region lhr1)",
+    );
+  });
+
+  it("recognises local URLs", () => {
+    for (const url of ["http://localhost:5678/x", "http://127.0.0.1/x", "http://[::1]:5678/x", "http://n8n.localhost/x"]) {
+      expect(isLocalUrl(url)).toBe(true);
+    }
+    expect(isLocalUrl("https://team.app.n8n.cloud/webhook/x")).toBe(false);
   });
 });
 

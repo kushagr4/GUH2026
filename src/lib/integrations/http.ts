@@ -37,6 +37,8 @@ export type ApiRequest<Schema extends z.ZodType> = {
   body?: unknown;
   /** Validates the response. Select only the fields you use. */
   schema: Schema;
+  /** If the body isn't JSON, validate the raw text instead of failing. */
+  acceptText?: boolean;
   timeoutMs?: number;
   /**
    * Retry on 429, 5xx, timeouts and network errors. Defaults to true for GET
@@ -178,14 +180,15 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
   type Reader<T> = (response: Response, label: string) => Promise<T>;
 
   const readJson =
-    <Schema extends z.ZodType>(schema: Schema): Reader<z.infer<Schema>> =>
+    <Schema extends z.ZodType>(schema: Schema, acceptText = false): Reader<z.infer<Schema>> =>
     async (response, label) => {
       const text = await response.text();
       let json: unknown;
       try {
         json = text ? JSON.parse(text) : undefined;
       } catch {
-        throw fail("invalid_response", `${label} did not return JSON`);
+        if (!acceptText) throw fail("invalid_response", `${label} did not return JSON`);
+        json = text;
       }
       const parsed = schema.safeParse(json);
       if (!parsed.success) {
@@ -294,7 +297,7 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
   return {
     // async, so even an invalid path is a rejected promise rather than a throw.
     async request(request) {
-      return execute(request, readJson(request.schema));
+      return execute(request, readJson(request.schema, request.acceptText));
     },
     async requestBinary(request) {
       return execute(request, readBinary(request.maxBytes ?? 10 * 1024 * 1024));

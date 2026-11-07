@@ -3,6 +3,38 @@ import "server-only";
 /** Where variables come from: process.env by default, a plain object in tests. */
 export type EnvSource = Readonly<Record<string, string | undefined>>;
 
+/**
+ * True on a hosting platform rather than a developer's machine. A hosted server
+ * can't reach services on someone's laptop, such as a local `npx n8n`.
+ */
+export function isHostedRuntime(env: EnvSource = process.env): boolean {
+  return Boolean(
+    env.VERCEL || env.NETLIFY || env.RENDER || env.RAILWAY_ENVIRONMENT || env.FLY_APP_NAME || env.K_SERVICE,
+  );
+}
+
+/** Where this server runs, in plain words, for /dev/integrations. */
+export function describeRuntime(env: EnvSource = process.env): string {
+  if (env.VERCEL) {
+    const region = env.VERCEL_REGION ? `, region ${env.VERCEL_REGION}` : "";
+    return `Hosted on Vercel (${env.VERCEL_ENV ?? "deployment"}${region})`;
+  }
+  if (isHostedRuntime(env)) return "Hosted deployment";
+  return env.NODE_ENV === "production"
+    ? "This machine, production build (npm start)"
+    : "This machine, development server (npm run dev)";
+}
+
+/** localhost, 127.0.0.1, [::1] or *.localhost. */
+export function isLocalUrl(value: string): boolean {
+  try {
+    const { hostname } = new URL(value);
+    return ["localhost", "127.0.0.1", "[::1]"].includes(hostname) || hostname.endsWith(".localhost");
+  } catch {
+    return false;
+  }
+}
+
 /** One server-only environment variable an integration reads. */
 export type EnvVarSpec = {
   /** For example FIRECRAWL_API_KEY. Never a NEXT_PUBLIC_ name. */

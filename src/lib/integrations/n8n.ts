@@ -1,7 +1,14 @@
 import "server-only";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
-import { readIntegrationEnv, type EnvSource, type IntegrationStatus } from "./env";
+import {
+  isHostedRuntime,
+  isLocalUrl,
+  readIntegrationEnv,
+  type EnvSource,
+  type IntegrationEnv,
+  type IntegrationStatus,
+} from "./env";
 import { IntegrationError } from "./errors";
 import { createApiClient, type ApiClient, type ApiClientOptions } from "./http";
 
@@ -34,6 +41,22 @@ export const N8N_ENV = {
     hint: "be at least 16 characters with no spaces",
   },
 } as const;
+
+/**
+ * The env check, plus one rule it can't know: a hosted deployment can't reach
+ * an n8n running on someone's laptop.
+ */
+function readN8nConfig(env: EnvSource): IntegrationEnv<typeof N8N_ENV> {
+  const config = readIntegrationEnv(N8N_ENV, env);
+  if (config.state === "ready" && isLocalUrl(config.values.webhookUrl) && isHostedRuntime(env)) {
+    return {
+      state: "invalid",
+      reason:
+        "N8N_WEBHOOK_URL points at localhost, which a hosted deployment can't reach. Use an n8n Cloud production URL here, or demo from the laptop that runs n8n.",
+    };
+  }
+  return config;
+}
 
 export type TriggerOptions<Schema extends z.ZodType> = {
   /** Validates what a "Respond to Webhook" node sends back. */
@@ -85,6 +108,8 @@ export function createN8nClient(
         path: `${url.pathname}${url.search}`,
         body: { event, sentAt: new Date().toISOString(), payload },
         schema: options.schema ?? z.unknown(),
+        // "Respond Immediately" replies "Workflow got started", which may not be JSON.
+        acceptText: true,
         timeoutMs: options.timeoutMs,
         signal: options.signal,
       });
@@ -97,7 +122,7 @@ let cached: { key: string; client: N8nClient } | undefined;
 
 /** The shared client. Throws a not_configured IntegrationError until both variables are set. */
 export function getN8n(env: EnvSource = process.env): N8nClient {
-  const config = readIntegrationEnv(N8N_ENV, env);
+  const config = readN8nConfig(env);
   if (config.state !== "ready") {
     throw new IntegrationError(NAME, "not_configured", `n8n is ${config.state}: ${config.reason}`);
   }
@@ -115,7 +140,7 @@ export function getN8n(env: EnvSource = process.env): N8nClient {
  * Returns false when no callback secret is configured.
  */
 export function isAuthorizedN8nCallback(request: Request, env: EnvSource = process.env): boolean {
-  const config = readIntegrationEnv(N8N_ENV, env);
+  const config = readN8nConfig(env);
   const expected = config.state === "ready" ? config.values.callbackSecret : undefined;
   const header = request.headers.get("authorization") ?? "";
   if (!expected || !header.startsWith("Bearer ")) return false;
@@ -123,15 +148,27 @@ export function isAuthorizedN8nCallback(request: Request, env: EnvSource = proce
   return timingSafeEqual(digest(header.slice("Bearer ".length)), digest(expected));
 }
 
+function describeWebhook(webhookUrl: string, callbackSecret: string | undefined): string {
+  const url = new URL(webhookUrl);
+  const where = isLocalUrl(webhookUrl)
+    ? `Webhook on ${url.host}, on this machine only: a hosted deployment can't reach it.`
+    : `Webhook on ${url.host}.`;
+  const testUrl = url.pathname.includes("/webhook-test/")
+    ? " This is a test URL, which only works while the n8n editor is listening. Use the production URL for the demo."
+    : "";
+  const callbacks = callbackSecret ? " Callbacks are accepted." : " No callback secret, so callbacks are refused.";
+  return `${where}${testUrl}${callbacks}`;
+}
+
 export function n8nStatus(env: EnvSource = process.env): IntegrationStatus {
-  const config = readIntegrationEnv(N8N_ENV, env);
+  const config = readN8nConfig(env);
   return {
     id: "n8n",
     name: NAME,
     state: config.state,
     detail:
       config.state === "ready"
-        ? `Webhook on ${new URL(config.values.webhookUrl).host}. ${config.values.callbackSecret ? "Callbacks are accepted." : "No callback secret, so callbacks are refused."}`
+        ? describeWebhook(config.values.webhookUrl, config.values.callbackSecret)
         : config.state === "off"
           ? "Off (optional). Set N8N_WEBHOOK_URL and N8N_WEBHOOK_SECRET to turn it on."
           : config.reason,

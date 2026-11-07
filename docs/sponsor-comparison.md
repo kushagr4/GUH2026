@@ -2,7 +2,7 @@
 
 Researched from official documentation on **7 November 2026**. Free tiers and prize rules change, so confirm anything important at the event. Where the docs were unclear or contradicted each other, or something couldn't be verified, this page says so.
 
-**Prize status:** "Best Use of ElevenLabs" and "Best Use of n8n" are confirmed prize categories, from the team's reading of the Devpost page. The others are sponsors whose prizes, if any, are announced at the opening ceremony. Details are in [sponsor-strategy.md](sponsor-strategy.md), along with the decision matrix and project concepts. The code pattern is in [integrations.md](integrations.md).
+**Prize status:** "Best Use of ElevenLabs" and "Best Use of n8n" are confirmed prize categories on the official Devpost page, and **each team may enter only one sponsor challenge**. The others are sponsors whose prizes, if any, are announced at the opening ceremony. Details are in [sponsor-strategy.md](sponsor-strategy.md), along with the decision matrix and project concepts. The code pattern is in [integrations.md](integrations.md), and the live checks are in [live-verification.md](live-verification.md).
 
 ## At a glance
 
@@ -107,7 +107,7 @@ From [pricing](https://n8n.io/pricing) and the [npm install guide](https://docs.
 
 ### How it connects to our app
 
-- **App to n8n** (`src/lib/integrations/n8n.ts`): the Webhook node uses **Header Auth** with header `X-N8N-Secret` and our `N8N_WEBHOOK_SECRET` as the value ([Webhook node](https://docs.n8n.io/integrations/builtin/core-nodes/n8n-nodes-base.webhook/)). Use the **production** URL, which only works while the workflow is active. The test URL only works while the editor is listening. `getN8n().trigger(event, payload)` posts `{ event, sentAt, payload }`. It isn't retried, so a workflow never runs twice.
+- **App to n8n** (`src/lib/integrations/n8n.ts`): the Webhook node uses **Header Auth** with header `X-N8N-Secret` and our `N8N_WEBHOOK_SECRET` as the value ([Webhook node](https://docs.n8n.io/integrations/builtin/core-nodes/n8n-nodes-base.webhook/)). Use the **production** URL (`/webhook/…`), which n8n registers when you **publish** the workflow. The test URL (`/webhook-test/…`) only works while the editor is listening, and `/dev/integrations` warns if it is configured. Replies that are plain text, such as "Respond Immediately", are accepted too. `getN8n().trigger(event, payload)` posts `{ event, sentAt, payload }`. It isn't retried, so a workflow never runs twice.
 - **Getting results back (preferred):** set the Webhook node to respond with a **Respond to Webhook** node. The result comes back in the same request, and our Server Action saves it as the signed-in user, under RLS. No callback route and no admin key are needed.
 - **n8n to the app (only if needed):** an HTTP Request node sends `Authorization: Bearer <N8N_CALLBACK_SECRET>`, and our route checks it with `isAuthorizedN8nCallback(request)`. There is no user session, so a database write needs `createAdminClient()` and careful checks on what is written. Avoid this unless the workflow is long-running.
 - **Never give n8n the Supabase secret key.** Its Supabase node needs one ([credentials](https://docs.n8n.io/integrations/builtin/credentials/supabase.md)), and that key bypasses RLS. Have n8n call our app instead.

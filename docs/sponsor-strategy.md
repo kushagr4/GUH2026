@@ -6,19 +6,24 @@ How to pick sponsor technology quickly, and three project concepts ready to adap
 
 | Status | What | Source |
 | --- | --- | --- |
-| **Confirmed prize** | **Best Use of ElevenLabs** | GreatUniHack's Devpost page, as reported by the team. Devpost blocks automated reads, so this repo couldn't open it. ElevenLabs is on the official sponsor list |
-| **Confirmed prize** | **Best Use of n8n** | As above. n8n is on the official sponsor list |
+| **Confirmed prize** | **Best Use of ElevenLabs** | The official GreatUniHack 2026 Devpost page, confirmed by the team. Devpost blocks automated reads, so this repo couldn't open it |
+| **Confirmed prize** | **Best Use of n8n** | As above |
+| **Confirmed rule** | **Each team may enter at most ONE sponsor challenge** | As above |
 | **Confirmed prize** | Overall: £3,500 for the top three teams (£1,750, £1,050, £700) | [greatunihack.com](https://greatunihack.com/) |
 | Sponsor, prize unknown | Firecrawl, Lovable, GitHub, Anthropic, and others | Official sponsor list. The site says challenge tracks are revealed at the opening ceremony |
-| **Speculative** | Any Firecrawl, Lovable, GitHub or Anthropic prize | Not announced. Plan for them only as a bonus |
+| **Speculative** | Any Firecrawl, Lovable, GitHub or Anthropic prize | Not announced. If one is announced, it competes for the same single entry |
 
-**So the plan is:** build around ElevenLabs and n8n, which are both confirmed, and make sure the project can still win overall. Add a speculative sponsor only if the opening ceremony announces a prize for it. Anthropic is already our AI provider (`src/lib/ai`), so a Claude track would cost nothing extra.
+**So the plan is:**
+- **Enter exactly one sponsor challenge. ElevenLabs is the recommendation** (section 3).
+- Every team competes for the overall prizes anyway, so the project must stand on its own.
+- Use a second sponsor's technology only if it clearly makes the product better. It earns no second prize, and every extra service is one more thing that can fail during the demo.
+- Anthropic is already our AI provider (`src/lib/ai`), so using Claude costs nothing extra in either case.
 
-**Decide by 12:15.** Use the checklist during the ceremony, then the matrix.
+**Decide by 12:15.** Use the checklist during the ceremony, then the matrix. Write down which challenge you're entering, and enter only that one on Devpost.
 
 ## 2. Judging criteria checklist
 
-- [ ] **Each prize's rules:** what "best use" means to that sponsor. Is the technology a core feature or just present? Is there a minimum, such as an API call, a published workflow or a video showing it? Does the team need to register with the sponsor? Can one project enter several tracks?
+- [ ] **Each prize's rules:** what "best use" means to that sponsor. Is the technology a core feature or just present? Is there a minimum, such as an API call, a published workflow or a video showing it? Does the team need to register with the sponsor? Remember: **one sponsor challenge per team.**
 - [ ] **Criteria and weighting:** innovation, technical depth, use of the sponsor technology, design, impact, presentation. Note the order each sponsor mentions them in.
 - [ ] **Submission:** the Devpost fields, video, public repo, deployed URL, "built with" tags, and the deadline (18:00, with **no late submissions**).
 - [ ] **Free credits or codes:** ElevenLabs and n8n sponsors often hand them out. Redeem them before 12:00. Check that a code needs no card before using it, because we use no paid services.
@@ -59,60 +64,65 @@ Why the scores are what they are:
   - It must never hold our Supabase secret key.
 - **Firecrawl, GitHub, Lovable:** unchanged from the earlier research. They are only worth adding if a prize is announced.
 
-**Best combination:** ElevenLabs and n8n together, as in Concept A. Each one is used where it's strongest, and both confirmed prizes are in play.
+### Choosing the one challenge
+
+Prize fit counts only for the challenge you enter, so compare the options one at a time.
+
+**Enter ElevenLabs (64) by default.** It scores higher on time to demo, demo impact and reuse.
+
+**Switch to n8n (59) if any of these is true:**
+- The ElevenLabs live check is **no-go**, for example because the account was blocked on the shared IP (see [live-verification.md](live-verification.md)).
+- n8n's announced criteria fit the idea clearly better.
+- A teammate already knows n8n well, which makes its time-to-demo score a 4 or 5.
+
+**Switch to an announced speculative prize** only if its total beats 64 (see above).
+
+Whichever you choose, its live check in [live-verification.md](live-verification.md) must be **go** before 13:00. Leave the other sponsor's integration switched off, unless it genuinely improves the product.
 
 ## 4. Project concepts
 
 Each concept reuses auth, RLS, storage, Realtime, AI and the integration clients, and each adapts to most themes. None is built yet, deliberately.
 
+Two concepts enter ElevenLabs, the recommendation, and one enters n8n, the fallback. Each uses only its own sponsor at its core.
+
 ### Concept A: Echo, voice notes that turn into actions
 
-**Sponsors:** ElevenLabs and n8n, both confirmed. **Optional:** Anthropic.
+**Challenge entered:** ElevenLabs. **Also uses:** Claude (`src/lib/ai`), at no extra cost.
 
-Someone records a voice note in the browser. ElevenLabs Scribe transcribes it, and Claude pulls out the tasks, dates and people. An n8n workflow then acts on them: it posts to Discord, emails a summary or files a reminder. The app reads back a short spoken confirmation with ElevenLabs text-to-speech, and the list updates live.
+Someone records a voice note in the browser, and ElevenLabs Scribe transcribes it. Claude pulls out the tasks, dates and people, and saves them to a list that updates live. ElevenLabs then reads back a short spoken confirmation, and can read the day's list aloud on request.
 
-- **Theme fit:** accessibility (hands-free capture), wellbeing (voice journaling), education (lecture notes into revision tasks), community (voice reports routed to the right people).
-- **Sponsor depth:**
-  - **ElevenLabs:** both directions, speech-to-text and text-to-speech.
-  - **n8n:** real orchestration, using a webhook trigger, branching and two or more app nodes, then "Respond to Webhook" returning what it did.
+- **Theme fit:** accessibility (hands-free capture), wellbeing (voice journaling), education (lecture notes into revision tasks), community (voice reports).
+- **Sponsor depth:** both directions, speech-to-text and text-to-speech, plus a voice choice from `listVoices()`. That's what a "best use" judge looks for.
 - **New work:**
   - A migration for `notes (owner_id, audio_path, transcript, actions jsonb, status)` with RLS, added to Realtime.
   - The recording UI, using `MediaRecorder` and an upload to the user's own Storage folder.
-  - A Server Action that calls `getElevenLabs().transcribe()`, then `generateObject` for the actions, then `getN8n().trigger("note.actions", …)` and saves the reply.
-  - One n8n workflow.
+  - A Server Action that calls `getElevenLabs().transcribe()`, then `generateObject`, and saves the result as the user.
+  - An audio route that calls `speak()`, cached in Storage.
 - **Budget:**
   - Scribe is billed per audio hour.
-  - About 20 spoken confirmations of 100 characters each use under 2,000 credits.
-  - One n8n execution per note. The Cloud trial includes 1,000 executions.
+  - About 20 spoken confirmations of 100 characters each use under 2,000 of the 10,000 credits.
 
 | Time | Milestone |
 | --- | --- |
-| 12:00 | ElevenLabs key and n8n webhook working on `/dev/integrations`, migration PR merged and pushed by the owner |
+| 12:00 | ElevenLabs live check **go**, migration PR merged and pushed by the owner |
 | 13:30 | Record, upload and transcribe a note, then store it |
-| 14:30 | Claude extracts actions, and n8n receives them and replies |
-| 15:30 | Spoken confirmation, live list |
-| 16:00 | **Demo ready.** Pre-record two demo notes as a fallback |
-| 17:00 | Polish, a second n8n branch |
-| 17:30 | Submission: a screenshot of the workflow, and where each sponsor is used |
+| 14:30 | Claude extracts actions into a live list |
+| 15:30 | Spoken confirmation and "read my list" |
+| 16:00 | **Demo ready.** Save fallback audio and two pre-recorded notes |
+| 17:00 | Polish |
+| 17:30 | Submission, naming ElevenLabs as the challenge entered and where it's used |
 
-**Demo:** speak one note live, then show it transcribed, the actions extracted, the Discord message arriving and the confirmation spoken back. **Fallbacks:**
-- Pre-recorded notes.
-- Cached transcripts.
-- `AI_PROVIDER=mock`.
-- If n8n is down, show its last execution.
+**Demo:** speak one note live, then show it transcribed, the actions appearing and the confirmation spoken back. **Fallbacks:** pre-recorded notes, cached transcripts and saved audio, plus `AI_PROVIDER=mock`.
 
 ### Concept B: Brief, research read aloud
 
-**Sponsors:** ElevenLabs (confirmed). **Bonus:** Firecrawl and n8n, if announced or wanted.
+**Challenge entered:** ElevenLabs.
 
-Someone asks a question, for example "Which student hardship funds can I apply for?". The app gathers sources, writes a short cited briefing with Claude, and **narrates it** with ElevenLabs, so people can listen on the move. An optional n8n schedule sends a weekly audio digest.
+Someone asks a question, for example "Which student hardship funds can I apply for?". The app gathers sources and writes a short cited briefing with Claude, then **narrates it** with ElevenLabs, so people can listen on the move.
 
 - **Theme fit:** almost any theme with an information problem, such as wellbeing, housing, accessibility or civic life.
-- **Sponsor depth:**
-  - **ElevenLabs:** narration, with a voice choice from `listVoices()`.
-  - **Firecrawl, if used:** `search({ withContent: true })`.
-  - **n8n, if used:** a Schedule trigger that calls our API.
-- **Without Firecrawl:** the user pastes links or text, and the narration remains the sponsor feature.
+- **Sponsor depth:** narration with a choice of voice, plus spoken follow-up questions transcribed with Scribe.
+- **Sources:** the user pastes links or text. Firecrawl's `search({ withContent: true })` would automate this, but it's a sponsor technology that earns no prize unless the plan changes.
 - **New work:**
   - A migration for `briefs (owner_id, question, sources jsonb, brief text, audio_path)`.
   - `src/features/brief/`.
@@ -121,30 +131,33 @@ Someone asks a question, for example "Which student hardship funds can I apply f
 
 **Demo:** ask one question live and play the narration. Show saved briefings for the rest.
 
-### Concept C: Pulse, a live tracker with automated follow-up
+### Concept C: Relay, requests routed to the right place automatically
 
-**Sponsors:** n8n (confirmed). **Bonus:** Firecrawl or GitHub, if announced.
+**Challenge entered:** n8n. This is the fallback if ElevenLabs is no-go.
 
-Users track public things that change, such as events, opening times, prices or repositories. An n8n Schedule workflow asks our API to re-check them, the app stores what changed, and the board updates live through Realtime. n8n then notifies people, and ElevenLabs can add a spoken "what changed today".
+People submit something in the app, such as an accessibility issue, a society event request or a wellbeing check-in. The app sends it to an n8n workflow. n8n classifies it with its own Anthropic node, branches, and routes it, for example to a Discord channel, a confirmation email or a spreadsheet row. It then replies, in the same request, with what it did. The app saves that outcome as the user, and the status updates live.
 
-- **Sponsor depth:**
-  - **n8n:** scheduling, branching and notifications.
-  - **Firecrawl, if used:** `extract()` with a zod schema.
-  - **GitHub, if used:** `getGitHub().request()` for repository activity.
+- **Theme fit:** community, accessibility, campus life, or anything with requests that need triage.
+- **Sponsor depth:** a real workflow, with a webhook trigger, an AI node, branching, two or more app nodes and Respond to Webhook. Judges see both the app and the workflow canvas.
+- **Why it works under our rules:** n8n answers within the same request, so the app writes as the signed-in user, under RLS. There's no callback route and no admin key, and **n8n never holds the Supabase secret key**.
 - **New work:**
-  - A migration for `tracked_items (owner_id, url, data jsonb, checked_at)`.
-  - A route for n8n to call, checked with `isAuthorizedN8nCallback`, that queues re-checks.
-  - The board page.
-- **Note:** a callback from n8n has no user session, so writing to the database needs the admin client and careful authorisation (see [integrations.md](integrations.md)). Concept A avoids this, because n8n replies within the same request.
+  - A migration for `requests (owner_id, body, category, routed_to, status)` with RLS, added to Realtime.
+  - A form, and a Server Action that calls `getN8n().trigger("request.created", …, { schema })` and saves the reply.
+  - The n8n workflow, which needs the test branch from [live-verification.md](live-verification.md).
+- **Avoid in 6 hours:** a scheduled n8n workflow that calls back into the app. A callback has no user session, so it needs the admin client and careful authorisation.
 
-**Demo:** trigger the schedule by hand in n8n, and watch the board change live.
+**Demo:** submit a request, show the Discord message arriving, show the execution on the n8n canvas, and show the status updating live in the app.
+
+**Hosting:** a local `npx n8n` works only if the demo runs on the same laptop. A deployed app needs n8n Cloud (see [live-verification.md](live-verification.md)).
 
 ## 5. Turning a sponsor on (5 minutes each)
+
+Turn on only the challenge you entered, then run its live check in [live-verification.md](live-verification.md) from the demo environment.
 
 | Sponsor | Steps |
 | --- | --- |
 | **ElevenLabs** | **One** teammate creates the account. On the dashboard, create a key restricted to text-to-speech and speech-to-text, with a credit limit. Set `ELEVENLABS_API_KEY` in `.env.local`, restart, and press **Speak** on `/dev/integrations` |
-| **n8n** | Start the Cloud trial (no card) or run `npx n8n` (Node 20.19 to 24, no Docker). Add a Webhook node with Header Auth: name `X-N8N-Secret`, value = `N8N_WEBHOOK_SECRET`. Copy its **production** URL into `N8N_WEBHOOK_URL`, activate the workflow, and press **Send test event** |
+| **n8n** | Start the Cloud trial (no card) or run `npx n8n` (Node 20.19 to 24, no Docker). Add a Webhook node with Header Auth: name `X-N8N-Secret`, value = `N8N_WEBHOOK_SECRET`. Copy its **production** URL into `N8N_WEBHOOK_URL`, **publish** the workflow, and press **Send test event** |
 | Firecrawl | Only if a prize is announced. Set `FIRECRAWL_API_KEY`, then press **Scrape** |
 | GitHub | Works now for public data. Set `GITHUB_API_TOKEN` for the demo |
 | Lovable | Only if a prize is announced. Build in a **new** Lovable project, never connected to our Supabase |
