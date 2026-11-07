@@ -31,6 +31,12 @@ import { ToneBadge } from "./tone-badge";
 
 const MAP_LIMIT = 200;
 
+type Layout = "wide" | "side";
+const LAYOUTS: ReadonlyArray<readonly [Layout, string]> = [
+  ["wide", "Full-width map"],
+  ["side", "Side panel"],
+];
+
 /** Synthetic runs are "as of" SYNTHETIC_NOW, so the demo reads the same at any time. */
 function referenceTime(data: MapResponse): string {
   return data.mode === "synthetic" ? SYNTHETIC_NOW : data.generatedAt;
@@ -64,7 +70,9 @@ export function EmberGapDashboard({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [anomaliesOpen, setAnomaliesOpen] = useState(false);
   const [investigationsOpen, setInvestigationsOpen] = useState(true);
+  const [layout, setLayout] = useState<Layout>("wide");
   const requestRef = useRef<AbortController | null>(null);
+  const side = layout === "side";
 
   const now = referenceTime(data);
   const investigations = data.features.filter((feature) => feature.kind === "investigation");
@@ -138,9 +146,25 @@ export function EmberGapDashboard({
         {firms?.state === "unavailable" && firms.message ? (
           <span className="text-amber-800 dark:text-amber-300">{firms.message}</span>
         ) : null}
+        <div className="ml-auto flex gap-1 rounded-lg border bg-background p-0.5" role="group" aria-label="Layout">
+          {LAYOUTS.map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              aria-pressed={layout === id}
+              onClick={() => setLayout(id)}
+              className={cn(
+                "rounded-md px-2.5 py-1 font-medium",
+                layout === id ? "bg-orange-600 text-white" : "text-foreground hover:bg-orange-50 dark:hover:bg-orange-950",
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_20rem]">
+      <div className={side ? "grid gap-3 lg:grid-cols-[minmax(0,1fr)_20rem]" : "flex flex-col gap-3"}>
         <HeatMap
           features={data.features}
           regions={regions}
@@ -149,10 +173,16 @@ export function EmberGapDashboard({
           onSelect={select}
           onViewSettled={load}
           labelFor={featureLabel}
-          className="h-[65vh] min-h-[420px] lg:h-[calc(100vh-12rem)]"
+          className="h-[65vh] min-h-[420px] w-full lg:h-[calc(100vh-13rem)]"
         />
 
-        <aside className="flex flex-col gap-3 lg:max-h-[calc(100vh-12rem)] lg:overflow-y-auto">
+        <div
+          className={
+            side
+              ? "flex flex-col gap-3 lg:max-h-[calc(100vh-13rem)] lg:overflow-y-auto"
+              : "grid items-start gap-3 md:grid-cols-2"
+          }
+        >
           <Section
             title="Investigations"
             tone="rose"
@@ -187,7 +217,7 @@ export function EmberGapDashboard({
               />
             ))}
           </Section>
-        </aside>
+        </div>
       </div>
     </div>
   );
