@@ -608,7 +608,7 @@ export function HeatMap({
             aria-pressed={item.id === regionId && userCamera === null}
             onClick={() => showRegion(item)}
             className={cn(
-              "rounded-md px-2.5 py-1 text-xs font-medium",
+              "rounded-md px-2.5 py-1.5 text-left text-xs font-medium",
               item.id === regionId && userCamera === null
                 ? "bg-orange-600 text-white"
                 : "hover:bg-orange-50 hover:text-orange-800 dark:hover:bg-orange-950",

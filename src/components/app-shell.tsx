@@ -12,11 +12,11 @@ export function AppShell({
   children: ReactNode;
 }) {
   return (
-    <div className="flex min-h-full flex-col">
-      <header className="border-b">
-        <div className="mx-auto flex w-full max-w-5xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
+    <div className="flex min-h-full flex-col bg-[#fffaf3] dark:bg-[#211711]">
+      <header className="border-b border-[#f0deca] bg-[#fffdf9]/95 dark:border-[#674632] dark:bg-[#2d2018]">
+        <div className="mx-auto flex w-full max-w-[1440px] flex-wrap items-center gap-x-5 gap-y-2 px-4 py-3 sm:px-8">
           <Link
-            className="inline-flex items-center gap-2 rounded-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-4"
+            className="inline-flex items-center gap-2 rounded-sm text-lg font-semibold tracking-tight text-[#52230d] focus-visible:outline-2 focus-visible:outline-offset-4 dark:text-[#fff0db]"
             href="/app/embergap"
             aria-label="EmberGap home"
           >
@@ -29,11 +29,11 @@ export function AppShell({
             </span>
             {siteConfig.name}
           </Link>
-          <nav className="flex flex-wrap items-center gap-4 text-sm">
+          <nav aria-label="Main navigation" className="flex flex-wrap items-center gap-4 text-sm">
             {siteConfig.nav.map((item) => (
               <Link
                 key={item.href}
-                className="text-muted-foreground transition-colors hover:text-foreground"
+                className="rounded-md px-2 py-1.5 font-medium text-[#71513d] transition-colors hover:bg-[#fff0df] hover:text-[#a33300] focus-visible:outline-2 focus-visible:outline-offset-2 dark:text-[#edd6c1] dark:hover:bg-[#503322] dark:hover:text-white"
                 href={item.href}
               >
                 {item.label}
