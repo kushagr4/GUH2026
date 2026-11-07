@@ -749,8 +749,13 @@ async function main() {
       }
       warnAboutOverrides();
       const nextArgs = args.filter((arg) => arg !== SWITCH_FLAG);
+      // Server-side agent workers need the service role (createAdminClient). The
+      // local stack's key goes to the Next.js process in memory only: it is never
+      // written to .env.local or printed, and a key you exported yourself wins.
+      const { secretKey } = localTestSettings(vars);
+      const nextEnv = process.env.SUPABASE_SECRET_KEY ? process.env : { ...process.env, SUPABASE_SECRET_KEY: secretKey };
       console.log("Starting Next.js at http://localhost:3000 (Ctrl+C to stop).");
-      const code = await runChild(process.execPath, [NEXT, "dev", ...nextArgs], process.env);
+      const code = await runChild(process.execPath, [NEXT, "dev", ...nextArgs], nextEnv);
       console.log("\nNext.js stopped. Local Supabase is still running, with your data. Stop it with npm run local:stop.");
       process.exitCode = code === 130 ? 0 : code;
       return;

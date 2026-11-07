@@ -28,6 +28,8 @@ create table public.report_media (
   object_path text not null unique check (char_length(object_path) <= 200),
   mime_type text not null check (mime_type in ('image/jpeg', 'image/png', 'image/webp')),
   size_bytes integer not null check (size_bytes between 1 and 5242880),
+  -- Fingerprint of the verified bytes, for spotting one photo in several reports.
+  sha256 text check (sha256 ~ '^[0-9a-f]{64}$'),
   is_synthetic boolean not null default false,
   created_at timestamptz not null default now(),
   constraint report_media_owner_required check (is_synthetic or owner_id is not null),
@@ -74,7 +76,10 @@ create table public.investigations (
   updated_at timestamptz not null default now(),
   constraint investigations_owner_required check (is_synthetic or owner_id is not null),
   constraint investigations_review_consistent check (
-    (status = 'reviewed') = (review_outcome is not null and reviewed_at is not null)
+    case when status = 'reviewed'
+      then review_outcome is not null and reviewed_at is not null
+      else review_outcome is null and reviewed_at is null
+    end
   )
 );
 
@@ -218,6 +223,8 @@ create table public.agent_findings (
   -- Supplied by the agent and stable across redelivery, so a duplicate is a no-op.
   id uuid primary key,
   investigation_id uuid not null references public.investigations (id) on delete cascade,
+  -- The report this finding assesses, or null for investigation-wide findings.
+  report_id uuid references public.reports (id) on delete cascade,
   agent_id text not null check (agent_id in ('vision', 'satellite', 'weather', 'witness', 'fusion')),
   assessment text not null check (assessment in ('supports', 'contradicts', 'inconclusive', 'context')),
   strength text check (strength in ('weak', 'moderate', 'strong')),
@@ -225,6 +232,7 @@ create table public.agent_findings (
   reason_codes text[] not null check (cardinality(reason_codes) between 1 and 20),
   explanation text not null check (char_length(explanation) between 1 and 2000),
   limitations text[] not null default '{}' check (cardinality(limitations) <= 20),
+  limitation_notes text[] not null default '{}' check (cardinality(limitation_notes) <= 10),
   recommendation jsonb check (recommendation is null or jsonb_typeof(recommendation) = 'object'),
   is_synthetic boolean not null default false,
   created_at timestamptz not null,
@@ -239,14 +247,16 @@ create table public.agent_findings (
   constraint agent_findings_only_fusion_recommends check ((agent_id = 'fusion') = (recommendation is not null)),
   constraint agent_findings_recommendation_status check (
     recommendation is null
-    or recommendation ->> 'recommendedStatus' in ('needs_human_review', 'insufficient_evidence')
+    or recommendation ->> 'recommendedStatus' in ('investigating', 'needs_human_review', 'insufficient_evidence')
   ),
+  constraint agent_findings_fusion_is_context check (agent_id <> 'fusion' or (assessment = 'context' and strength is null)),
   constraint agent_findings_strength_directional check (strength is null or assessment in ('supports', 'contradicts'))
 );
 
 comment on table public.agent_findings is 'EmberGap agent findings. Append-only. Findings never confirm an incident.';
 
 create index agent_findings_investigation_idx on public.agent_findings (investigation_id, created_at desc);
+create index agent_findings_report_idx on public.agent_findings (report_id) where report_id is not null;
 
 -- ---------------------------------------------------------------------------
 -- agent_events: the investigation timeline (append-only, idempotent)
@@ -350,7 +360,7 @@ revoke all on table public.report_media, public.investigations, public.reports,
   public.observations, public.agent_findings, public.agent_events from anon, public, authenticated;
 
 grant select on table public.report_media to authenticated;
-grant insert (id, object_path, mime_type, size_bytes) on table public.report_media to authenticated;
+grant insert (id, object_path, mime_type, size_bytes, sha256) on table public.report_media to authenticated;
 
 grant select on table public.reports to authenticated;
 grant insert (client_request_id, observed_at, latitude, longitude, location_uncertainty_m, description, media_id)

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { hasEmbeddedMetadata, sniffImageType, verifyUploadedMedia } from "@/features/embergap/media";
 
@@ -75,7 +76,12 @@ describe("verifyUploadedMedia", () => {
     expect(downloads).toEqual([`${USER}/${MEDIA}.jpg`]);
     expect(result).toEqual({
       ok: true,
-      data: { objectPath: `${USER}/${MEDIA}.jpg`, mimeType: "image/jpeg", sizeBytes: PLAIN_JPEG.length },
+      data: {
+        objectPath: `${USER}/${MEDIA}.jpg`,
+        mimeType: "image/jpeg",
+        sizeBytes: PLAIN_JPEG.length,
+        sha256: createHash("sha256").update(PLAIN_JPEG).digest("hex"),
+      },
     });
   });
 

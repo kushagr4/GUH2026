@@ -1,4 +1,5 @@
 import "server-only";
+import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   REPORT_MEDIA_BUCKET,
@@ -76,7 +77,7 @@ export function hasEmbeddedMetadata(bytes: Uint8Array, type: ReportMediaMimeType
 }
 
 export type MediaCheck =
-  | { ok: true; data: { objectPath: string; mimeType: ReportMediaMimeType; sizeBytes: number } }
+  | { ok: true; data: { objectPath: string; mimeType: ReportMediaMimeType; sizeBytes: number; sha256: string } }
   | { ok: false; message: string };
 
 export async function verifyUploadedMedia(
@@ -102,5 +103,6 @@ export async function verifyUploadedMedia(
       message: "The photo still contains hidden metadata, which can include its GPS location. Re-encode it, then upload again.",
     };
   }
-  return { ok: true, data: { objectPath, mimeType: upload.mimeType, sizeBytes: data.size } };
+  const sha256 = createHash("sha256").update(bytes).digest("hex");
+  return { ok: true, data: { objectPath, mimeType: upload.mimeType, sizeBytes: data.size, sha256 } };
 }

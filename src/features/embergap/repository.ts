@@ -53,13 +53,14 @@ function toIso(value: string | null): string | null {
 
 export async function insertReportMedia(
   client: EmbergapClient,
-  media: { id: string; objectPath: string; mimeType: ReportMediaMimeType; sizeBytes: number },
+  media: { id: string; objectPath: string; mimeType: ReportMediaMimeType; sizeBytes: number; sha256: string },
 ): Promise<DbResult<{ id: string }>> {
   const { error } = await client.from("report_media").insert({
     id: media.id,
     object_path: media.objectPath,
     mime_type: media.mimeType,
     size_bytes: media.sizeBytes,
+    sha256: media.sha256,
   });
   if (!error) return { ok: true, data: { id: media.id } };
   if (error.code === "23505") {
@@ -201,6 +202,7 @@ function toSummary(row: InvestigationRow): InvestigationSummary {
   return {
     id: row.id,
     status: row.status as InvestigationStatus,
+    reviewOutcome: row.review_outcome as InvestigationSummary["reviewOutcome"],
     reviewPriority: row.review_priority as Investigation["reviewPriority"],
     location: {
       latitude: Number(row.public_latitude),
@@ -220,7 +222,6 @@ function toSummary(row: InvestigationRow): InvestigationSummary {
 function toInvestigation(row: InvestigationRow): Investigation {
   return {
     ...toSummary(row),
-    reviewOutcome: row.review_outcome as Investigation["reviewOutcome"],
     reviewedAt: toIso(row.reviewed_at),
     reviewNote: row.review_note,
   };
@@ -234,6 +235,7 @@ export function toMapFeature(investigation: InvestigationSummary, now = new Date
     location: investigation.location,
     investigationId: investigation.id,
     status: investigation.status,
+    reviewOutcome: investigation.reviewOutcome,
     reviewPriority: investigation.reviewPriority,
     observedAt: investigation.latestEvidenceAt,
     freshness: classifyFreshness({
@@ -243,6 +245,8 @@ export function toMapFeature(investigation: InvestigationSummary, now = new Date
     }),
     sources: investigation.sources,
     provenance: investigation.isSynthetic ? SYNTHETIC_PROVENANCE : REPORTER_PROVENANCE,
+    firms: null,
+    investigation,
   };
 }
 
@@ -301,6 +305,7 @@ function availabilityFor(
   source: SourceKind,
   observations: Observation[],
   now: string,
+  referenceAt: string | undefined,
 ): SourceAvailability | null {
   const own = observations.filter((observation) => observation.source === source);
   if (own.length === 0) return null;
@@ -311,8 +316,18 @@ function availabilityFor(
   const state =
     newest.sourceState === "unavailable" || newest.sourceState === "not_observed"
       ? newest.sourceState
-      : classifyFreshness({ latestObservedAt, checkedAt: now, maxAgeSeconds });
-  return { source, state, checkedAt: newest.retrievedAt, latestObservedAt, maxAgeSeconds, message: null };
+      : classifyFreshness({ latestObservedAt, checkedAt: now, maxAgeSeconds, referenceAt });
+  const window = state === "not_observed" ? newest.coverage : null;
+  return {
+    source,
+    state,
+    checkedAt: newest.retrievedAt,
+    latestObservedAt,
+    maxAgeSeconds,
+    windowStart: window?.windowStart ?? null,
+    windowEnd: window?.windowEnd ?? null,
+    message: null,
+  };
 }
 
 /**
@@ -346,7 +361,7 @@ export async function getInvestigationDetail(
     client
       .from("agent_findings")
       .select(
-        "id, investigation_id, agent_id, created_at, evidence_ids, assessment, strength, reason_codes, explanation, limitations, recommendation, is_synthetic",
+        "id, investigation_id, report_id, agent_id, created_at, evidence_ids, assessment, strength, reason_codes, explanation, limitations, limitation_notes, recommendation, is_synthetic",
       )
       .eq("investigation_id", investigationId)
       .order("created_at", { ascending: false })
@@ -413,6 +428,7 @@ export async function getInvestigationDetail(
     const parsed = agentFindingSchema.safeParse({
       id: row.id,
       investigationId: row.investigation_id,
+      reportId: row.report_id,
       agentId: row.agent_id,
       createdAt: toIso(row.created_at),
       evidenceIds: row.evidence_ids,
@@ -421,6 +437,7 @@ export async function getInvestigationDetail(
       reasonCodes: row.reason_codes,
       explanation: row.explanation,
       limitations: row.limitations,
+      limitationNotes: row.limitation_notes,
       recommendation: row.recommendation,
       isSynthetic: row.is_synthetic,
     });
@@ -446,7 +463,7 @@ export async function getInvestigationDetail(
 
   const now = new Date().toISOString();
   const sourceAvailability = (["firms", "weather", "eonet", "vision"] as const)
-    .map((source) => availabilityFor(source, observations, now))
+    .map((source) => availabilityFor(source, observations, now, reports[0]?.observedAt))
     .filter((entry): entry is SourceAvailability => entry !== null);
   if (reports.length > 0) {
     const latestObservedAt = reports.map((report) => report.observedAt).reduce((a, b) => (a >= b ? a : b));
@@ -456,6 +473,8 @@ export async function getInvestigationDetail(
       checkedAt: now,
       latestObservedAt,
       maxAgeSeconds: SOURCE_MAX_AGE_SECONDS.human,
+      windowStart: null,
+      windowEnd: null,
       message: null,
     });
   }

@@ -27,14 +27,14 @@ isOneToOne: false
                   ]
                 },"agent_findings": {
                   Row: {
-                    "agent_id": string,"assessment": string,"created_at": string,"evidence_ids": (string)[],"explanation": string,"id": string,"investigation_id": string,"is_synthetic": boolean,"limitations": (string)[],"reason_codes": (string)[],"recommendation": Json | null,"recorded_at": string,"strength": string | null
+                    "agent_id": string,"assessment": string,"created_at": string,"evidence_ids": (string)[],"explanation": string,"id": string,"investigation_id": string,"is_synthetic": boolean,"limitation_notes": (string)[],"limitations": (string)[],"reason_codes": (string)[],"recommendation": Json | null,"recorded_at": string,"report_id": string | null,"strength": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "agent_id": string,"assessment": string,"created_at": string,"evidence_ids"?: (string)[],"explanation": string,"id": string,"investigation_id": string,"is_synthetic"?: boolean,"limitations"?: (string)[],"reason_codes": (string)[],"recommendation"?: Json | null,"recorded_at"?: string,"strength"?: string | null
+                    "agent_id": string,"assessment": string,"created_at": string,"evidence_ids"?: (string)[],"explanation": string,"id": string,"investigation_id": string,"is_synthetic"?: boolean,"limitation_notes"?: (string)[],"limitations"?: (string)[],"reason_codes": (string)[],"recommendation"?: Json | null,"recorded_at"?: string,"report_id"?: string | null,"strength"?: string | null
                   }
                   Update: {
-                    "agent_id"?: string,"assessment"?: string,"created_at"?: string,"evidence_ids"?: (string)[],"explanation"?: string,"id"?: string,"investigation_id"?: string,"is_synthetic"?: boolean,"limitations"?: (string)[],"reason_codes"?: (string)[],"recommendation"?: Json | null,"recorded_at"?: string,"strength"?: string | null
+                    "agent_id"?: string,"assessment"?: string,"created_at"?: string,"evidence_ids"?: (string)[],"explanation"?: string,"id"?: string,"investigation_id"?: string,"is_synthetic"?: boolean,"limitation_notes"?: (string)[],"limitations"?: (string)[],"reason_codes"?: (string)[],"recommendation"?: Json | null,"recorded_at"?: string,"report_id"?: string | null,"strength"?: string | null
                   }
                   Relationships: [
                     {
@@ -42,6 +42,12 @@ isOneToOne: false
       columns: ["investigation_id"]
 isOneToOne: false
       referencedRelation: "investigations"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "agent_findings_report_id_fkey"
+      columns: ["report_id"]
+isOneToOne: false
+      referencedRelation: "reports"
       referencedColumns: ["id"]
     }
                   ]
@@ -109,14 +115,14 @@ isOneToOne: false
                   ]
                 },"report_media": {
                   Row: {
-                    "created_at": string,"id": string,"is_synthetic": boolean,"mime_type": string,"object_path": string,"owner_id": string | null,"size_bytes": number
+                    "created_at": string,"id": string,"is_synthetic": boolean,"mime_type": string,"object_path": string,"owner_id": string | null,"sha256": string | null,"size_bytes": number
                   }
                   ComputedFields: never
                   Insert: {
-                    "created_at"?: string,"id": string,"is_synthetic"?: boolean,"mime_type": string,"object_path": string,"owner_id"?: string | null,"size_bytes": number
+                    "created_at"?: string,"id": string,"is_synthetic"?: boolean,"mime_type": string,"object_path": string,"owner_id"?: string | null,"sha256"?: string | null,"size_bytes": number
                   }
                   Update: {
-                    "created_at"?: string,"id"?: string,"is_synthetic"?: boolean,"mime_type"?: string,"object_path"?: string,"owner_id"?: string | null,"size_bytes"?: number
+                    "created_at"?: string,"id"?: string,"is_synthetic"?: boolean,"mime_type"?: string,"object_path"?: string,"owner_id"?: string | null,"sha256"?: string | null,"size_bytes"?: number
                   }
                   Relationships: [
                     

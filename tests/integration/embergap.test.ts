@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { submitReport } from "@/features/embergap/submit";
 import { getInvestigationDetail, listMapInvestigations } from "@/features/embergap/repository";
+import { createSupabaseRuntimeStore, loadAgentReports, reporterKeyFor, taskSubjectFor } from "@/features/embergap/runtime";
 import {
   investigationDetailResponseSchema,
   mapFeatureSchema,
@@ -8,6 +9,7 @@ import {
   reportMediaObjectPath,
   reportSubmissionRequestSchema,
   SYNTHETIC_SCENARIOS,
+  syntheticId,
   VISION_REQUIRED_LIMITATIONS,
 } from "@/lib/embergap/contracts";
 import { readTestEnv } from "../support/test-env";
@@ -339,6 +341,68 @@ describe.skipIf(!env)("EmberGap reports, RLS and private photos", () => {
         .select("id");
       expect(duplicate.error).toBeNull();
       expect(duplicate.data).toEqual([]);
+    });
+
+    it("gives workers an idempotent, validated store and canonical agent reports", async () => {
+      const admin = createAdmin(env!);
+      const store = createSupabaseRuntimeStore(admin);
+      const repeated = SYNTHETIC_SCENARIOS.find((scenario) => scenario.id === "repeated-witness")!;
+
+      const reports = await loadAgentReports(admin, repeated.investigationId);
+      expect(reports.map((report) => report.id)).toEqual([...repeated.reportIds]);
+      // One synthetic witness reported twice: one reporter key.
+      expect(new Set(reports.map((report) => report.reporterKey)).size).toBe(1);
+      expect(taskSubjectFor(reports[0], "repeated-witness").location).toEqual({ latitude: 53.91, longitude: -1.83, precisionMeters: 1000 });
+
+      const [aliceAgentReport] = await loadAgentReports(admin, aliceReport.investigationId);
+      expect(aliceAgentReport.reporterKey).toBe(reporterKeyFor(alice.id, aliceReport.investigationId));
+      expect(aliceAgentReport.reporterKey).not.toContain(alice.id);
+
+      const finding = {
+        id: crypto.randomUUID(),
+        investigationId: aliceReport.investigationId,
+        reportId: aliceReport.reportId,
+        agentId: "witness" as const,
+        createdAt: new Date().toISOString(),
+        evidenceIds: [aliceReport.reportId],
+        assessment: "inconclusive" as const,
+        strength: null,
+        reasonCodes: ["witness.single_report"],
+        explanation: "One report so far; no independent witness yet.",
+        limitations: ["human_report_unverified" as const],
+        limitationNotes: ["Witness reports are unverified human claims."],
+        recommendation: null,
+        isSynthetic: false,
+      };
+      await store.saveFinding(finding);
+      await store.saveFinding(finding); // redelivery is a no-op
+      const event = {
+        id: crypto.randomUUID(),
+        investigationId: aliceReport.investigationId,
+        type: "finding_recorded" as const,
+        actor: "witness" as const,
+        occurredAt: new Date().toISOString(),
+        recordedAt: new Date().toISOString(),
+        idempotencyKey: `finding_recorded:${finding.id}`,
+        messageId: null,
+        summary: "The witness agent recorded a finding.",
+        details: null,
+        isSynthetic: false,
+      };
+      await store.appendEvents([event, { ...event, id: crypto.randomUUID() }]);
+      await store.setAutomatedStatus(aliceReport.investigationId, "needs_human_review", "medium");
+
+      const detail = await getInvestigationDetail(alice.client, { userId: alice.id, isReviewer: false }, aliceReport.investigationId);
+      expect(detail.ok).toBe(true);
+      if (!detail.ok) return;
+      const stored = detail.data.findings.filter((row) => row.id === finding.id);
+      expect(stored).toHaveLength(1);
+      expect(stored[0]).toMatchObject({ reportId: aliceReport.reportId, limitationNotes: finding.limitationNotes });
+      expect(detail.data.events.filter((row) => row.idempotencyKey === event.idempotencyKey)).toHaveLength(1);
+      expect(detail.data.investigation).toMatchObject({ status: "needs_human_review", reviewPriority: "medium" });
+
+      // A finding that breaks the science never reaches the database.
+      await expect(store.saveFinding({ ...finding, id: syntheticId("test/bad"), agentId: "satellite", assessment: "contradicts", strength: "weak" })).rejects.toThrow();
     });
 
     // Last, because it turns Bob into a reviewer.
