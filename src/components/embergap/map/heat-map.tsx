@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { cn } from "cn";
 import type { Bbox, MapFeature } from "@/lib/embergap/contracts";
 import type { MapRegion } from "@/lib/embergap/read/regions";
@@ -11,10 +11,12 @@ import {
   tilesFor,
   toScreen,
   viewBbox,
+  viewTransform,
   zoomAround,
   type Camera,
   type Point,
   type Size,
+  type Tile,
 } from "./projection";
 
 /**
@@ -65,6 +67,10 @@ const PINCH_ZOOM_PER_UNIT = 1 / 40;
 const TOUCH_PINCH_GAIN = 1.6;
 const CONTROL = "size-8 text-base leading-none hover:bg-orange-50 hover:text-orange-700 dark:hover:bg-orange-950";
 const SETTLE_MS = 500;
+/** While the view moves, the heat layer is transformed; it is redrawn once it has been still this long. */
+const HEAT_REDRAW_MS = 140;
+/** Coarser zoom levels kept under the sharp tiles, so zooming never shows empty squares. */
+const PLACEHOLDER_LEVELS = [2, 1] as const;
 
 type Layers = { investigations: boolean; anomalies: boolean };
 
@@ -190,6 +196,34 @@ function drawHeat(canvas: HTMLCanvasElement, kernels: Kernel[]) {
   ctx.putImageData(image, 0, 0);
 }
 
+/** Draws the heat layer for one camera, at device resolution. */
+function paintHeat(canvas: HTMLCanvasElement, camera: Camera, size: Size, features: MapFeature[]) {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const width = Math.round(size.width * dpr);
+  const height = Math.round(size.height * dpr);
+  if (canvas.width !== width) canvas.width = width;
+  if (canvas.height !== height) canvas.height = height;
+  const metresPerPx = metresPerPixel(camera.latitude, camera.zoom);
+  const kernels: Kernel[] = [];
+  for (const feature of features) {
+    const { x, y } = toScreen(camera, size, feature.location.latitude, feature.location.longitude);
+    const r = radiusOf(feature, metresPerPx);
+    if (x > -r && y > -r && x < size.width + r && y < size.height + r) {
+      kernels.push(...kernelsFor(feature, x * dpr, y * dpr, r * dpr));
+    }
+  }
+  drawHeat(canvas, kernels);
+}
+
+/** Tiles to draw, coarse placeholders first so the sharp level paints on top. */
+function layeredTiles(camera: Camera, size: Size, template: string, placeholders: readonly number[]): Tile[] {
+  const byKey = new Map<string, Tile>();
+  for (const below of [...placeholders, 0]) {
+    for (const tile of tilesFor(camera, size, template, below)) byKey.set(tile.key, tile);
+  }
+  return [...byKey.values()];
+}
+
 export function HeatMap({
   features,
   regions,
@@ -225,15 +259,44 @@ export function HeatMap({
 
   const region = regions.find((item) => item.id === regionId) ?? regions[0]!;
   // Until the user moves the map, it fits the chosen region.
-  const camera = userCamera ?? (size ? fitCamera(region.bbox, size) : null);
+  // Memoised so hover and other re-renders keep the same camera object.
+  const fittedCamera = useMemo(() => (size ? fitCamera(region.bbox, size) : null), [region.bbox, size]);
+  const camera = userCamera ?? fittedCamera;
 
   const gesture = useRef<Gesture | null>(null);
   const pointers = useRef(new Map<number, Point>());
   const latest = useRef({ camera, size, onViewSettled });
   const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** The newest camera asked for, which may be ahead of the rendered one. */
+  const requested = useRef<Camera | null>(null);
+  const frame = useRef<number | null>(null);
+  const drawnHeat = useRef<{ camera: Camera; size: Size; features: MapFeature[] } | null>(null);
   useEffect(() => {
-    latest.current = { camera, size, onViewSettled };
+    if (requested.current === camera) requested.current = null;
+    latest.current = { camera: requested.current ?? camera, size, onViewSettled };
   });
+
+  /**
+   * Input fires faster than the screen refreshes (trackpads especially), so
+   * camera changes are collected and rendered at most once per frame.
+   */
+  const requestCamera = useCallback((next: Camera) => {
+    requested.current = next;
+    latest.current = { ...latest.current, camera: next };
+    if (frame.current !== null) return;
+    frame.current = requestAnimationFrame(() => {
+      frame.current = null;
+      if (requested.current) setCamera(requested.current);
+    });
+  }, []);
+
+  const cancelCameraRequest = useCallback(() => {
+    if (frame.current !== null) cancelAnimationFrame(frame.current);
+    frame.current = null;
+    requested.current = null;
+  }, []);
+
+  useEffect(() => cancelCameraRequest, [cancelCameraRequest]);
 
   useEffect(() => {
     const element = containerRef.current;
@@ -279,16 +342,14 @@ export function HeatMap({
         x: event.clientX - rect.left,
         y: event.clientY - rect.top,
       });
-      // Trackpads fire wheel events faster than React re-renders: record the
-      // new camera now so the next event builds on it instead of overwriting it.
-      latest.current = { ...latest.current, camera: next };
-      setCamera(next);
+      // Each event builds on the newest camera, even before it has rendered.
+      requestCamera(next);
       setHover(null);
       settle();
     };
     element.addEventListener("wheel", onWheel, { passive: false });
     return () => element.removeEventListener("wheel", onWheel);
-  }, []);
+  }, [requestCamera]);
 
   const visible = useMemo(
     () => features.filter((feature) => (feature.kind === "investigation" ? layers.investigations : layers.anomalies)),
@@ -305,21 +366,32 @@ export function HeatMap({
     }));
   }, [camera, size, visible]);
 
+  // Full heat redraws are expensive (a per-pixel recolour), so during a pan or
+  // zoom the last drawing is moved with a CSS transform, and it is redrawn
+  // once the view has been still for HEAT_REDRAW_MS.
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || !size) return;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const width = Math.round(size.width * dpr);
-    const height = Math.round(size.height * dpr);
-    if (canvas.width !== width) canvas.width = width;
-    if (canvas.height !== height) canvas.height = height;
-    drawHeat(
-      canvas,
-      screen
-        .filter((p) => p.x > -p.r && p.y > -p.r && p.x < size.width + p.r && p.y < size.height + p.r)
-        .flatMap((p) => kernelsFor(p.feature, p.x * dpr, p.y * dpr, p.r * dpr)),
-    );
-  }, [screen, size]);
+    if (!canvas || !size || !camera) return;
+    const draw = () => {
+      paintHeat(canvas, camera, size, visible);
+      drawnHeat.current = { camera, size, features: visible };
+      canvas.style.transform = "";
+    };
+    const drawn = drawnHeat.current;
+    if (!drawn || drawn.size !== size || drawn.features !== visible) {
+      draw();
+      return;
+    }
+    if (drawn.camera === camera) return;
+    const t = viewTransform(drawn.camera, camera, size);
+    if (t.scale === 1 && Math.abs(t.x) < 0.01 && Math.abs(t.y) < 0.01) {
+      drawnHeat.current = { ...drawn, camera };
+      return;
+    }
+    canvas.style.transform = `translate(${t.x}px, ${t.y}px) scale(${t.scale})`;
+    const timer = setTimeout(draw, HEAT_REDRAW_MS);
+    return () => clearTimeout(timer);
+  }, [camera, size, visible]);
 
   function local(event: PointerEvent<HTMLDivElement>): Point {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -340,19 +412,20 @@ export function HeatMap({
   }
 
   function onPointerDown(event: PointerEvent<HTMLDivElement>) {
-    if (!camera || event.button !== 0) return;
+    const base = latest.current.camera ?? camera;
+    if (!base || event.button !== 0) return;
     event.currentTarget.setPointerCapture(event.pointerId);
     pointers.current.set(event.pointerId, local(event));
     const points = [...pointers.current.values()];
     if (points.length === 1) {
-      gesture.current = { kind: "pan", start: points[0]!, camera, moved: false };
+      gesture.current = { kind: "pan", start: points[0]!, camera: base, moved: false };
     } else if (points.length === 2) {
       const [a, b] = points as [Point, Point];
       gesture.current = {
         kind: "pinch",
         startDistance: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)),
         mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 },
-        camera,
+        camera: base,
       };
     }
   }
@@ -366,14 +439,14 @@ export function HeatMap({
       const dy = point.y - current.start.y;
       if (!current.moved && Math.hypot(dx, dy) < 4) return;
       current.moved = true;
-      setCamera(panBy(current.camera, dx, dy));
+      requestCamera(panBy(current.camera, dx, dy));
       setHover(null);
       return;
     }
     if (current?.kind === "pinch" && size && pointers.current.size === 2) {
       const [a, b] = [...pointers.current.values()] as [Point, Point];
       const distance = Math.hypot(a.x - b.x, a.y - b.y);
-      setCamera(
+      requestCamera(
         zoomAround(
           current.camera,
           size,
@@ -396,26 +469,30 @@ export function HeatMap({
     if (pointers.current.size === 0) {
       gesture.current = null;
       if (current && (current.kind === "pinch" || current.moved)) settle();
-    } else if (current?.kind === "pinch" && camera) {
+    } else if (current?.kind === "pinch") {
       const [remaining] = [...pointers.current.values()];
-      gesture.current = remaining ? { kind: "pan", start: remaining, camera, moved: true } : null;
+      const base = latest.current.camera ?? camera;
+      gesture.current = remaining && base ? { kind: "pan", start: remaining, camera: base, moved: true } : null;
     }
   }
 
   function zoomBy(step: number, anchor?: Point) {
-    if (!camera || !size) return;
-    setCamera(zoomAround(camera, size, camera.zoom + step, anchor ?? { x: size.width / 2, y: size.height / 2 }));
+    const base = latest.current.camera ?? camera;
+    if (!base || !size) return;
+    requestCamera(zoomAround(base, size, base.zoom + step, anchor ?? { x: size.width / 2, y: size.height / 2 }));
     settle();
   }
 
   function showRegion(next: MapRegion) {
+    cancelCameraRequest();
     setRegionId(next.id);
     setCamera(null);
     if (size && onViewSettled) onViewSettled(viewBbox(fitCamera(next.bbox, size), size));
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    if (!camera) return;
+    const base = latest.current.camera ?? camera;
+    if (!base) return;
     const step = 80;
     const moves: Record<string, [number, number]> = {
       ArrowLeft: [step, 0],
@@ -426,7 +503,7 @@ export function HeatMap({
     if (moves[event.key]) {
       event.preventDefault();
       const [dx, dy] = moves[event.key]!;
-      setCamera(panBy(camera, dx, dy));
+      requestCamera(panBy(base, dx, dy));
       settle();
     } else if (event.key === "+" || event.key === "=") {
       zoomBy(1);
@@ -436,7 +513,7 @@ export function HeatMap({
   }
 
   const selected = screen.find((point) => point.feature.id === selectedId) ?? null;
-  const baseTiles = camera && size ? tilesFor(camera, size, basemap.tiles) : [];
+  const baseTiles = camera && size ? layeredTiles(camera, size, basemap.tiles, PLACEHOLDER_LEVELS) : [];
   const labelTiles = camera && size && basemap.labels ? tilesFor(camera, size, basemap.labels) : [];
 
   const renderTiles = (tiles: typeof baseTiles, layer: string, extraClass: string) =>
@@ -450,6 +527,7 @@ export function HeatMap({
           alt=""
           aria-hidden
           draggable={false}
+          decoding="async"
           referrerPolicy="strict-origin-when-cross-origin"
           className={cn("pointer-events-none absolute max-w-none", extraClass)}
           style={{ left: tile.x, top: tile.y, width: tile.size, height: tile.size }}
@@ -485,7 +563,11 @@ export function HeatMap({
         basemap.invertInDark ? "dark:opacity-80 dark:invert dark:hue-rotate-180" : "",
       )}
 
-      <canvas ref={canvasRef} aria-hidden className="pointer-events-none absolute inset-0 h-full w-full" />
+      <canvas
+        ref={canvasRef}
+        aria-hidden
+        className="pointer-events-none absolute inset-0 h-full w-full origin-top-left will-change-transform"
+      />
 
       {renderTiles(labelTiles, `${basemapId}-labels`, "")}
 

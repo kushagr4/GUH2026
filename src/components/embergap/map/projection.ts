@@ -106,9 +106,11 @@ const SUBDOMAINS = "abcd";
  * Tiles covering the view, in screen pixels. Uses the next whole zoom up, so
  * tiles are only ever scaled down (sharp), never up (blurry). `{s}` in the
  * template is replaced with a/b/c/d to spread requests across hosts.
+ * Keys include the tile zoom, so tiles of different levels never collide.
  */
-export function tilesFor(camera: Camera, size: Size, template: string): Tile[] {
-  const tileZoom = Math.min(20, Math.ceil(camera.zoom - 1e-9));
+export function tilesFor(camera: Camera, size: Size, template: string, levelsBelow = 0): Tile[] {
+  // levelsBelow > 0 gives coarser, already-cached tiles to show while sharper ones load.
+  const tileZoom = Math.max(0, Math.min(20, Math.ceil(camera.zoom - 1e-9)) - levelsBelow);
   const scale = 2 ** (camera.zoom - tileZoom);
   const tilePx = TILE_SIZE * scale;
   const count = 2 ** tileZoom;
@@ -136,4 +138,25 @@ export function tilesFor(camera: Camera, size: Size, template: string): Tile[] {
     }
   }
   return tiles;
+}
+
+export type ViewTransform = { scale: number; x: number; y: number };
+
+/**
+ * The affine map from screen pixels under `from` to screen pixels under `to`
+ * (screen = scale * screenFrom + offset). Web Mercator scales linearly with
+ * 2^zoom, so a layer drawn for `from` can be moved with a CSS transform
+ * instead of being redrawn on every frame of a gesture.
+ */
+export function viewTransform(from: Camera, to: Camera, size: Size): ViewTransform {
+  const scale = 2 ** (to.zoom - from.zoom);
+  const fromX = lonToWorldX(from.longitude, from.zoom);
+  const fromY = latToWorldY(from.latitude, from.zoom);
+  const toX = lonToWorldX(to.longitude, to.zoom);
+  const toY = latToWorldY(to.latitude, to.zoom);
+  return {
+    scale,
+    x: scale * (fromX - size.width / 2) - toX + size.width / 2,
+    y: scale * (fromY - size.height / 2) - toY + size.height / 2,
+  };
 }
