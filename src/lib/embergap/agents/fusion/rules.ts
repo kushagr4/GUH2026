@@ -27,7 +27,7 @@ import type {
   SourceAgentId,
 } from "./types";
 
-export const FUSION_RULES_VERSION = "fusion-rules/1.0.0" as const;
+export const FUSION_RULES_VERSION = "fusion-rules/1.1.0" as const;
 
 /** Source agents in a fixed order, so every output is order-independent. */
 export const SOURCE_AGENTS: readonly SourceAgentId[] = [
@@ -48,9 +48,16 @@ export const GAP_REASON_CODES: ReadonlySet<string> = new Set([
   "weather.unavailable",
   "weather.stale",
   "witness.no_reports",
+  // Canonical contract absence codes (src/lib/embergap/contracts.ts): unknown, never negative.
+  "satellite_pass_gap",
+  "no_thermal_detection_in_window",
+  "source_unavailable",
+  "source_stale",
 ]);
 
 export const WITNESS_CORROBORATION = "witness.independent_corroboration";
+/** The contract's well-known code for the same thing: independent reports near this one. */
+export const WITNESS_CORROBORATION_CANONICAL = "independent_reports_nearby";
 export const WITNESS_SINGLE_REPORT = "witness.single_report";
 
 /** Wording that must accompany every recommendation. */
@@ -136,7 +143,7 @@ export const CLASSIFICATION_RULES: readonly ClassificationRule[] = [
     matches: (ctx) =>
       ctx.agentId === "witness" &&
       ctx.latest?.assessment === "supports" &&
-      has(ctx, WITNESS_CORROBORATION),
+      (has(ctx, WITNESS_CORROBORATION) || has(ctx, WITNESS_CORROBORATION_CANONICAL)),
     reason: () =>
       "Independent witnesses are coherent in time and space; counted as ONE supporting source (witness), however many reports there are.",
   },
