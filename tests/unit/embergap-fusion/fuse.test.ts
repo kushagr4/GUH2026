@@ -84,6 +84,13 @@ describe("fuseFindings: strength and status", () => {
     expect(rec.gaps.map((g) => g.agentId)).toEqual(["satellite", "weather"]);
   });
 
+  it("an empty witness finding (witness.no_reports) is a gap, not a contradiction", () => {
+    const witnessNone = f("w-none", "witness", "inconclusive", ["witness.no_reports"]);
+    const rec = fuse([witnessNone, visionSmoke]);
+    expect(rec.gaps.map((g) => g.agentId)).toContain("witness");
+    expect(rec.contradictions).toEqual([]);
+  });
+
   it("weather alone never exceeds weak", () => {
     const rec = fuse([weatherDry]);
     expect(rec.evidenceStrength).toBe("weak");

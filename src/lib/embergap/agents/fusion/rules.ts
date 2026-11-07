@@ -47,6 +47,7 @@ export const GAP_REASON_CODES: ReadonlySet<string> = new Set([
   "satellite.stale",
   "weather.unavailable",
   "weather.stale",
+  "witness.no_reports",
 ]);
 
 export const WITNESS_CORROBORATION = "witness.independent_corroboration";
