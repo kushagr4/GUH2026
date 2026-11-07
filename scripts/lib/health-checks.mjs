@@ -11,27 +11,32 @@ async function probe(url, key) {
 
 const PAUSED_HINT =
   "Free projects pause after a week without activity. Check the Supabase dashboard and restore it if needed.";
+const LOCAL_HINT = "Start local Supabase with npm run local:up, or check npm run local:status.";
 
 /**
  * A handful of very small requests using only the publishable key, so it is safe
  * for any teammate to run. Nothing here reads or writes real rows.
  */
-export async function runHealthChecks(url, key) {
+export async function runHealthChecks(url, key, { local = false } = {}) {
   const base = url.replace(/\/+$/, "");
   const results = [];
+  const unreachable = local ? LOCAL_HINT : PAUSED_HINT;
+  const migrate = local ? "npm run local:migrate" : "npm run db:push";
 
   try {
     const { response, ms } = await probe(`${base}/auth/v1/health`, key);
     results.push({
       name: "Auth",
       ok: response.ok,
-      detail: response.ok ? `${ms} ms` : `HTTP ${response.status}. ${PAUSED_HINT}`,
+      detail: response.ok ? `${ms} ms` : `HTTP ${response.status}. ${unreachable}`,
     });
   } catch {
     results.push({
       name: "Auth",
       ok: false,
-      detail: `Could not reach the project. Check your network. ${PAUSED_HINT}`,
+      detail: local
+        ? `Could not reach local Supabase. ${unreachable}`
+        : `Could not reach the project. Check your network. ${unreachable}`,
     });
     return results;
   }
@@ -53,7 +58,7 @@ export async function runHealthChecks(url, key) {
     results.push({
       name: "Database",
       ok: false,
-      detail: "Connected, but the migrations have not been applied (npm run db:push).",
+      detail: `Connected, but the migrations have not been applied (${migrate}).`,
     });
   } else if (response.ok) {
     results.push({

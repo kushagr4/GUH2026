@@ -14,6 +14,19 @@ export function loadEnvFiles(...files) {
 
 export const PLACEHOLDER = /your-project-ref|your-publishable-key|placeholder/i;
 
+/** True for a Supabase URL on this machine, which means the local Docker stack. */
+export function isLocalUrl(value) {
+  try {
+    const url = new URL(value);
+    return (
+      (url.protocol === "http:" || url.protocol === "https:") &&
+      ["127.0.0.1", "localhost", "[::1]"].includes(url.hostname)
+    );
+  } catch {
+    return false;
+  }
+}
+
 /** Returns null when usable, or a human-readable reason when not. */
 export function describeSupabaseEnvProblem(url, key) {
   if (!url || !key) {
