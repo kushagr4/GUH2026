@@ -61,7 +61,7 @@ function availabilityFor(detections: FirmsDetection[], checkedAt: string, dayRan
     windowEnd: checkedAt,
     message:
       state === "not_observed"
-        ? "No thermal anomalies in this area in the window checked. That is unknown, not evidence of no fire."
+        ? "None in window. Unknown, not evidence of no fire."
         : null,
   };
 }
