@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
+import { buildEveryNodeViewModel } from "@/components/embergap/network/decentralised-view-model";
+import { EveryNodeDecides } from "@/components/embergap/network/every-node-decides";
 import { NetworkView } from "@/components/embergap/network/network-view";
+import { createDeterministicDeps, DECENTRALISED_SCENARIOS, simulateDecentralisedFusion } from "@/lib/embergap/agents/fusion";
 import { buildNetworkViewModel, stageSnapshotTimes, type StageId } from "@/components/embergap/network/view-model";
 import { runPartitionDemo } from "@/lib/embergap/agents/runtime";
 import { requireUser } from "@/lib/supabase/auth";
@@ -18,6 +21,11 @@ export default async function EmberGapNetworkPage() {
     replays[id] = id === "reconciled" ? full : await runPartitionDemo({ stopAtMs: times[id] });
   }
   const model = buildNetworkViewModel(full, replays);
+  const headline = DECENTRALISED_SCENARIOS[0];
+  const everyNode = buildEveryNodeViewModel(
+    simulateDecentralisedFusion(headline.input, createDeterministicDeps("network-page")),
+    headline.input.links,
+  );
 
   return (
     <div className="flex flex-col gap-5">
@@ -32,6 +40,7 @@ export default async function EmberGapNetworkPage() {
         <p className="text-sm text-muted-foreground">Outputs are review recommendations for a human, not verified incidents.</p>
       </header>
       <NetworkView model={model} />
+      <EveryNodeDecides model={everyNode} />
     </div>
   );
 }
