@@ -21,7 +21,7 @@ This file governs **coding assistants** working in the GUH2026 repository, in ad
 
 ### Five named sessions, strict API and UI ownership
 
-The only contributors are **Claude Mac**, **Claude PC**, **Danil**, **Outrolife** and **d3vmakes**. Use separate branches and local Docker databases. There is no separate Developer A or C. Read `docs/architecture.md` for the authoritative paths, interfaces and merge order.
+The only contributors are **Claude Mac**, **Claude PC**, **Danil**, **Outrolife** and **d3vmakes**. Use separate branches and local Docker databases. There is no separate Developer A or C. Read `docs/architecture.md` for the authoritative paths, interfaces and merge order, and `docs/embergap-api-ownership.md` for exact upstream APIs, internal routes, environment keys and names.
 
 | Role / branch | Own files and APIs | Deliverable |
 | --- | --- | --- |
