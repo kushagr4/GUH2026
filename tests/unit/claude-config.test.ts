@@ -16,10 +16,16 @@ describe("Claude Code skills and agents are discoverable", () => {
     expect(skills).toEqual(expect.arrayContaining(["feature-dev", "bugfix", "self-review"]));
   });
 
-  it.each(skills)("skill %s has a matching name and a description that says when to use it", (skill) => {
+  it.each(skills)("skill %s has a matching name and a description", (skill) => {
     const meta = frontmatter(`.claude/skills/${skill}/SKILL.md`);
     expect(meta.name).toBe(skill);
-    expect(String(meta.description)).toMatch(/Triggers on|\b[Uu]se\b/);
+    expect(String(meta.description ?? "").trim().length).toBeGreaterThan(0);
+  });
+
+  it("keeps self-review explicit-request-only during the hackathon fast build", () => {
+    const meta = frontmatter(".claude/skills/self-review/SKILL.md");
+    expect(String(meta.description)).not.toMatch(/Triggers on/);
+    expect(String(meta.description)).toMatch(/explicit/i);
   });
 
   it.each(["code-explorer", "code-architect", "code-reviewer"])("agent %s is read-only", (agent) => {
@@ -64,10 +70,11 @@ describe("the ready-made ruleset for main", () => {
     expect(ruleset.conditions.ref_name.include).toEqual(["refs/heads/main"]);
   });
 
-  // Hackathon fast-build mode (#8): every change still goes through a squash PR
-  // with green PR Checks, but approvals are not required.
-  it("requires a squash pull request and green PR Checks", () => {
-    expect(rule("pull_request").parameters).toMatchObject({ allowed_merge_methods: ["squash"] });
+  it("requires a squash-merged PR and PR Checks, with no mandatory approval (hackathon fast build)", () => {
+    expect(rule("pull_request").parameters).toMatchObject({
+      required_approving_review_count: 0,
+      allowed_merge_methods: ["squash"],
+    });
     expect(rule("required_status_checks").parameters.required_status_checks).toEqual([
       { context: "PR Checks", integration_id: 15368 },
     ]);
