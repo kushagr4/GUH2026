@@ -46,7 +46,7 @@ export function readSupabaseEnv(
     return {
       state: "placeholder",
       reason:
-        ".env.local still contains placeholder values. Run `npm run local:dev` to fill them in for local Supabase, or set the hosted project URL and publishable key.",
+        ".env.local still contains placeholder values. Set the hosted project's URL and publishable key (docs/supabase-cloud-development.md).",
     };
   }
   if (isPrivilegedKey(key)) {

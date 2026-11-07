@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { apiError, apiErrorFromDb, apiJson, readBodyText } from "@/features/embergap/api";
+import { scheduleInvestigation } from "@/features/embergap/orchestrator";
 import { submitReport } from "@/features/embergap/submit";
 import { reportSubmissionRequestSchema, reportSubmissionResponseSchema } from "@/lib/embergap/contracts";
 import { createRateLimiter } from "@/lib/rate-limit";
@@ -12,6 +13,8 @@ import { createClient } from "@/lib/supabase/server";
  * out (201 new, 200 replay), apiErrorResponseSchema on failure.
  */
 export const dynamic = "force-dynamic";
+// Covers the agent run scheduled with after() (orchestrator RUN_BUDGET_MS is 45 s).
+export const maxDuration = 60;
 
 const MAX_BODY_BYTES = 16 * 1024;
 
@@ -66,5 +69,7 @@ export async function POST(request: Request) {
   }
 
   const response = reportSubmissionResponseSchema.parse({ ...result.data, verification: "unverified" });
+  // A replay was already scheduled when it was first created.
+  if (!result.data.replayed) scheduleInvestigation(result.data.investigationId);
   return apiJson(result.data.replayed ? 200 : 201, response);
 }

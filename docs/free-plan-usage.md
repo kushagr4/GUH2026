@@ -29,7 +29,7 @@ Anyone can run this at any time. It uses only the publishable key, reads no rows
 npm run health
 ```
 
-It checks whichever project `.env.local` points at, which after `npm run local:dev` is your own local stack. To check the hosted project, the migration owner runs `npm run db:status`, or `npm run health` in a checkout whose `.env.local` points at hosted.
+It checks the hosted project in `.env.local`. The migration owner can also run `npm run db:status` to compare the migration history.
 
 For a browser view of every service including your session, open `/dev` while running in development.
 

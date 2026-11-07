@@ -42,13 +42,16 @@ Requires authenticated and **authorised** report owner/reviewer. Return an inves
 
 Do **not** invent an unauthenticated public `/api/run-agents` or an always-on worker endpoint exposed over the internet. Define a typed task/event interface for a deterministic local demo driver, plus server-only invocation if integration demands it. Only Mac wires trusted report submission to runtime scheduling. Outrolife can display status via its authorised GET APIs, not issue privileged agent commands from the browser.
 
+
+**On Vercel** there are no long-lived workers. The report route starts each investigation run with `scheduleInvestigation()` (`src/features/embergap/orchestrator.ts`, using `after()` and `maxDuration = 60`). Claude PC's runtime plugs in as an `InvestigationRunner`, writes through `EmberGapRuntimeStore`, and keeps partitions and delays as a deterministic simulation within one run. See `docs/architecture.md#agent-runtime-on-vercel`.
 ## Environment variables and safety
 
 | Environment variable | Owner | Availability |
 | --- | --- | --- |
 | `NASA_FIRMS_MAP_KEY` | Outrolife prepares adapter; developer holding credentials supplies key server-side | Optional to run live FIRMS; fixture mode works without |
 | `ANTHROPIC_API_KEY` | Danil integrates with existing AI provider; key provided securely | Optional for live Vision; mocked responses work without |
-| `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Claude Mac reuses existing project config | Local Docker script configures local values |
+| `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Claude Mac reuses existing project config | The existing hosted project's public values, in `.env.local` and in Vercel (no Docker) |
+| `SUPABASE_SECRET_KEY` | Claude Mac (agent runs) | Server-only, Vercel and the migration owner's machine only. Agent workers use it to record findings; never shared with teammates |
 | Open-Meteo / EONET | Claude PC | No keys typically required for public endpoints, subject to current provider terms |
 | Map tiles | Outrolife | Use a licensed provider; configure any key according to its public/private restrictions |
 

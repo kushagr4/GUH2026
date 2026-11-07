@@ -80,14 +80,16 @@ export function toCanonicalFinding(
   let recommendation: FusionRecommendationInput | null = null;
   if (finding.agentId === "fusion") {
     const source = context.recommendation;
-    const ids = (groups: Record<string, string[] | undefined> | undefined) =>
-      Object.values(groups ?? {}).flat().filter((id): id is string => Boolean(id)).map(toUuid);
+    // Only direct support and real contradictions: never weather context, weak
+    // single-witness signals, inconclusive findings or data gaps.
+    const idsOfKind = (kind: "support" | "contradiction") =>
+      (source?.agents ?? []).flatMap((agent) => (agent.kind === kind && agent.findingId ? [toUuid(agent.findingId)] : []));
     recommendation = {
       recommendedStatus: source?.status ?? "needs_human_review",
       reviewPriority: source?.reviewPriority ?? "medium",
       independentSourceCount: source?.independentSupportCount ?? 0,
-      supportingFindingIds: ids(source?.supporting),
-      contradictingFindingIds: ids(source?.contradicting),
+      supportingFindingIds: idsOfKind("support"),
+      contradictingFindingIds: idsOfKind("contradiction"),
       evidenceGaps: (source?.gaps ?? []).map((gap) => `${gap.agentId}: ${gap.reason}`.slice(0, 300)).slice(0, 20),
       possibleDuplicateReportIds: [],
     };

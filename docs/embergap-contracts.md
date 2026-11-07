@@ -111,8 +111,8 @@ Reason codes such as `witness.single_report` and `fusion.rule.S2-two-independent
 | d3vmakes | `POST /api/embergap/reports` | Creates a report and its investigation, as described above |
 | Outrolife | `listMapInvestigations(await createClient(), { bbox, limit })` from `@/features/embergap/repository` | Bounded, coarsened map features with `investigation` summaries. Pass `mapQuerySchema.parse(...)` output |
 | Outrolife | `getInvestigationDetail(await createClient(), viewer, id)` and `getEmbergapViewer()` from `@/features/embergap/viewer` | The detail response, or `not_found` under RLS. Map `DbResult` errors with `apiErrorFromDb` from `@/features/embergap/api` |
-| Claude PC | `createSupabaseRuntimeStore(createAdminClient())` from `@/features/embergap/runtime` | The `EmberGapRuntimeStore`: validated and idempotent. `local:dev` provides the local service key |
+| Claude PC | `createSupabaseRuntimeStore(createAdminClient())` from `@/features/embergap/runtime` | The `EmberGapRuntimeStore`: validated and idempotent. Needs `SUPABASE_SECRET_KEY` on the server (Vercel) |
 | Claude PC, Danil | `loadAgentReports(admin, investigationId)`, `taskSubjectFor(report, scenarioId)`, `loadReportImage(admin, mediaId)` | Inputs for `task_assigned` messages and the vision agent |
 | Danil | `toCanonicalFinding(finding, { investigationId, isSynthetic, recommendation })` from `@/features/embergap/adapters` | Turns your current validator and fusion output into canonical findings until your modules emit them directly |
 
-**Demo data:** the six synthetic scenarios ship with labelled observations, findings, fusion recommendations and timeline events, including a partition and reconciliation. Every signed-in user sees them after `npm run local:dev`.
+**Demo data:** the six synthetic scenarios ship with labelled observations, findings, fusion recommendations and timeline events, including a partition and reconciliation. Every signed-in user sees them once the migration owner has applied the migrations.

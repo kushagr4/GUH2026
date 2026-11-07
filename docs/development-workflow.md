@@ -7,7 +7,7 @@ The priority is **a working demo for judges**, not a production-grade product or
 1. `git status`; `git fetch origin main`. Start from the latest `main`, unless continuing an existing feature branch with uncommitted work.
 2. Create or use your assigned branch from `docs/architecture.md`. Do not write to another contributor's paths.
 3. Implement the smallest complete demonstrable slice using the shared contracts or clearly labelled synthetic fixtures.
-4. Run targeted unit tests, `npm run typecheck`, `npm run lint`, and if relevant `npm run db:lint` and `npm run local:test`. Run `npm run preflight` before demo integration when feasible. **Do not report unrun checks as passing**; CI runs automatically on each PR.
+4. Run targeted unit tests, `npm run typecheck`, `npm run lint`, and if relevant `npm run db:lint` and the hosted integration tests (only with `.env.test.local`, disposable users). Run `npm run preflight` before demo integration when feasible. **Do not report unrun checks as passing**; CI runs automatically on each PR.
 5. Commit with Conventional Commits such as `feat(embergap): add report endpoint` or `fix(agents): reconcile duplicate messages`.
 6. Push your feature branch and open a **non-draft PR** with `gh pr create --fill`. Include what works, a quick demo step, known limitations and exact tests run.
 7. **Stop at PR handoff.** The human owner merges when necessary CI results are satisfactory. Claude never approves or merges PRs or pushes directly to `main`.

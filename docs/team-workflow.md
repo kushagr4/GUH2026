@@ -1,10 +1,10 @@
 # Team workflow
 
-Each teammate has their own local Supabase in Docker (see [docker-development.md](docker-development.md)), built from `supabase/migrations/`. Code and migrations are shared through Git. Data isn't. The hosted free-plan project is for the deployed demo, and only the migration owner changes its schema.
+Everyone develops against the team's one hosted Supabase project ([supabase-cloud-development.md](supabase-cloud-development.md)); there is no Docker or local database. Code and migrations are shared through Git, and the database is shared too, so row-level security keeps each user's rows private. Only the migration owner changes the schema.
 
 ## Frontend and app changes
 
-Everyone has their own branch, dev server, local Supabase and `.env.local`, so this work can't disturb anyone else.
+Everyone has their own branch, dev server, `.env.local` and accounts, so frontend work can't disturb anyone else. Data you create is visible only to you (and reviewers); use disposable accounts for experiments, and never change another person's data.
 
 Every change goes through an owned feature branch and a normal PR with automated **PR Checks** but **no mandatory Claude self-review or teammate approval**. The steps are in [development-workflow.md](development-workflow.md). Keep `main` demoable at all times.
 
@@ -24,17 +24,16 @@ Every change goes through an owned feature branch and a normal PR with automated
 
 To hand over, change `supabase/MIGRATION_OWNER` in a PR, invite the new owner to the Supabase organisation, and have them run the first three steps of [supabase-setup.md](supabase-setup.md).
 
-`supabase/MIGRATION_OWNER` identifies the one person authorised to apply hosted migrations. The owner checks schema readiness using local migration/lint tests, not a required PR approval.
+`supabase/MIGRATION_OWNER` identifies the one person authorised to apply hosted migrations. The owner checks schema readiness with `npm run db:lint`, `npm run db:plan` and the hosted integration tests, not a required PR approval.
 
 ## Changing the schema
 
 1. **Create the file:** `npm run db:new -- add_things`
 2. **Write it.** The template includes the required grants, RLS and policies.
-3. **Try it locally:** `npm run local:migrate`, then `npm run local:types`. Check it in the app, in Studio (<http://127.0.0.1:54323>) and with `npm run local:test`.
-4. **Check it:** `npm run db:lint`
-5. **Open a normal PR** containing the additive migration, generated local types and the code that needs it. No mandatory reviewer pass.
-6. **Run schema verification:** `npm run db:lint`, `npm run local:migrate` and relevant local RLS tests. The human repo owner merges after checking necessary CI results. No teammate approval is required.
-7. **The owner applies it to the hosted project** from an up-to-date `main`, then checks that the hosted types match. `db:push` refuses to run anywhere else:
+3. **Check it:** `npm run db:lint`. Add RLS cases to `tests/integration/` that use disposable users.
+4. **Open a normal PR** containing the additive migration and the code that needs it. Until it's applied, the code should fail gracefully (`/dev` shows what's missing). No mandatory reviewer pass.
+5. **The human repo owner merges** after checking the CI results. No teammate approval is required.
+6. **The owner applies it to the hosted project** from an up-to-date `main`, then checks that the hosted types match. `db:push` refuses to run anywhere else:
 
 ```bash
 git switch main
@@ -56,8 +55,8 @@ npm run db:push
 npm run db:types -- --check
 ```
 
-   The check compares the schema, not formatting, so types generated locally pass, and usually nothing more is needed. If it fails, the hosted schema differs from the migrations.
-8. **If the types check failed, the owner opens a normal PR with regenerated types**, rather than pushing directly to `main`:
+   The check compares the schema, not formatting, so usually nothing more is needed. If it fails, the committed types differ from the hosted schema.
+7. **If the types check failed, the owner opens a normal PR with regenerated types**, rather than pushing directly to `main`:
 
 ```bash
 npm run db:types
@@ -80,11 +79,11 @@ gh pr create --fill
 ```
 
    The human repository owner merges when ready. No review gate.
-9. **Teammates pull.** Their next `npm run local:dev` applies the new migration to their own database.
+8. **Teammates pull.** The schema is already live for everyone, because there is one database.
 
 ### Keeping your code working until the migration lands
 
-Locally, your table is live as soon as you run `npm run local:migrate`, so you're never blocked. The hosted demo gets it only after the owner applies it. Until then, the deployed app shows a clear error rather than crashing, and `/dev` shows what's missing.
+Your table exists for everyone only after the owner applies it. Until then, keep building against fixtures (the EmberGap contracts include `SYNTHETIC_SCENARIOS`), and make the feature show a clear error rather than crash. `/dev` shows what's missing.
 
 ### Rules that prevent conflicts
 
@@ -92,17 +91,17 @@ Locally, your table is live as soon as you run `npm run local:migrate`, so you'r
 - **One owner per table.** Agree who is changing which table.
 - **Prefix by feature** when two people work in parallel, for example `poll_votes` and `poll_options`.
 - **Never edit a migration that has been applied.** Write a new one.
-- **Never change the schema in Studio, the dashboard or through MCP** without a matching migration file. Otherwise your teammates' databases, the hosted project and the types drift apart.
+- **Never change the schema in Studio, the dashboard or through MCP** without a matching migration file. Otherwise the migration history, the hosted project and the types drift apart.
 
 ### If two migrations collide
 
-Supabase applies files in timestamp order and rejects a file older than one already applied. If yours was overtaken, rename it with a new timestamp and push the change. Don't use `--include-all` on the hosted database. Locally, `npm run local:migrate -- --include-all` is fine for catching up after a pull.
+Supabase applies files in timestamp order and rejects a file older than one already applied. If yours was overtaken, rename it with a new timestamp and push the change. Don't use `--include-all` on the hosted database.
 
 If two people add the same table, the second one to merge rewrites theirs as an `alter table`.
 
 ### Undoing a mistake
 
-There's no reset on the hosted database. Write a new forward migration that corrects the mistake, and include a `-- migration-allow: destructive <reason>` line if it has to remove something. Locally, you may rebuild your own database from the files with `npm run local:reset -- --yes-delete-local-data`, which deletes your local data.
+There's no reset on the hosted database. Write a new forward migration that corrects the mistake, and include a `-- migration-allow: destructive <reason>` line if it has to remove something.
 
 ## Essential migration checks (not an approval gate)
 
@@ -114,11 +113,11 @@ There's no reset on the hosted database. Write a new forward migration that corr
 
 ## Secrets
 
-- For local development, teammates need no shared values. `npm run local:dev` writes the local URL and publishable key itself, and nothing else.
+- Teammates need only the two public values (the project URL and publishable key), from the dashboard or `npm run env:share`. The secret key is never shared: it lives only in Vercel and on the migration owner's machine.
 - `.env.local` and `.env.test.local` are gitignored. Never commit them.
 - Share values through a private channel the team trusts. Never put the secret key anywhere shared.
 - CI needs no secrets. Hosted CI is opt-in and uses GitHub Actions secrets.
 
 ## Onboarding a new teammate
 
-Send them the [README quick start](../README.md#quick-start) and this page. No shared keys are needed for local development. They should be running in under 5 minutes. `npm run doctor` tells them what's wrong if not.
+Send them the [README quick start](../README.md#quick-start), this page and [supabase-cloud-development.md](supabase-cloud-development.md), plus the two public values. They should be running in under 5 minutes. `npm run doctor` tells them what's wrong if not.
