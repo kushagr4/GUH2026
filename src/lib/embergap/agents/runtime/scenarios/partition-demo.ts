@@ -77,6 +77,12 @@ export type PhaseSummary = {
   /** At the end of the phase: per agent, events not yet confirmed by each peer. */
   unconfirmed: Record<string, Record<string, number>>;
   historyHashes: Record<string, string>;
+  /**
+   * At the end of the phase, per investigation: the latest recommendation the
+   * fusion agent made from the evidence that had reached IT. During the
+   * partition this differs from what the full evidence supports.
+   */
+  fusion: Record<string, { recommendedStatus: string; reviewPriority: string; independentSourceCount: number; sourceFindings: number; gaps: string[] } | null>;
 };
 
 export type DemoCheck = { name: string; passed: boolean; detail: string };
@@ -126,6 +132,7 @@ const scenario = (id: (typeof SYNTHETIC_SCENARIOS)[number]["id"]) => {
 };
 
 const HOUR_MS = 3_600_000;
+const DEMO_INVESTIGATIONS = [scenario("partition-recovery").investigationId, scenario("weather-timeout").investigationId];
 
 /** Every input the agents receive, built from labelled synthetic fixtures. */
 export function demoActions(): ScenarioAction[] {
@@ -227,6 +234,23 @@ function summarisePhase(name: PhaseSummary["name"], startMs: number, endMs: numb
   const eventsCreated: Record<string, number> = {};
   const reachability: Record<string, Record<string, PeerStatus>> = {};
   const unconfirmed: Record<string, Record<string, number>> = {};
+  const fusionAgent = status.agents.find((agent) => agent.agentId === "fusion");
+  const fusion: PhaseSummary["fusion"] = {};
+  for (const investigationId of DEMO_INVESTIGATIONS) {
+    const findings = (fusionAgent?.events ?? []).flatMap((event) =>
+      event.payload.kind === "finding" && event.investigationId === investigationId ? [event.payload.finding] : [],
+    );
+    const latest = findings.filter((finding) => finding.agentId === "fusion" && finding.recommendation).at(-1);
+    fusion[investigationId] = latest?.recommendation
+      ? {
+          recommendedStatus: latest.recommendation.recommendedStatus,
+          reviewPriority: latest.recommendation.reviewPriority,
+          independentSourceCount: latest.recommendation.independentSourceCount,
+          sourceFindings: findings.filter((finding) => finding.agentId !== "fusion").length,
+          gaps: latest.recommendation.evidenceGaps,
+        }
+      : null;
+  }
   for (const agent of status.agents) {
     tasksCompleted[agent.agentId] = agent.tasks.filter((task) => task.status === "done" && within(task.finishedAt)).length;
     eventsCreated[agent.agentId] = agent.events.filter((event) => event.origin === agent.agentId && within(event.createdAt)).length;
@@ -245,6 +269,7 @@ function summarisePhase(name: PhaseSummary["name"], startMs: number, endMs: numb
     reachability,
     unconfirmed,
     historyHashes: status.historyHashes,
+    fusion,
   };
 }
 
@@ -303,6 +328,8 @@ export async function runPartitionDemo(options: PartitionDemoOptions = {}): Prom
   const maxTimeMs = options.maxTimeMs ?? 60_000;
   const memory = options.store ? null : createMemoryRuntimeStore();
   const store = options.store ?? memory!;
+  // createDemoAgents defaults to Danil's vision validator and fusion, so fusion
+  // visibly re-decides as evidence reaches it. Pass processors to swap any of them.
   const agents = createDemoAgents({ runId, store, processors: options.processors, onEvidence: options.onEvidence, epochIso: SYNTHETIC_NOW });
   const network = createSimulatedNetwork({ nodes: [...DEMO_AGENT_IDS], seed, defaultLink: { ...DEMO_LINK, ...options.link } });
   const simulation = createSimulation({ host: createInProcessHost(agents), network, store, runId, isSynthetic: true, epochIso: SYNTHETIC_NOW });

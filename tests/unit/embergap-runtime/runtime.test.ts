@@ -252,7 +252,7 @@ describe("partitions and recovery", () => {
     const { simulation } = world(["weather", "witness"]);
     simulation.schedule({ at: 0, kind: "enqueue", agentId: "weather", task: task("orphan", "summary", ["never-scheduled"]) });
     const run = await simulation.runUntilSettled({ maxTime: 5_000 });
-    expect(run).toEqual({ settled: false, at: 5_000 });
+    expect(run).toEqual({ settled: false, at: 5_000, stopReason: "max-time" });
     expect((await simulation.status()).pendingTasks).toEqual([
       { agentId: "weather", taskId: "orphan", kind: "summary", status: "blocked", missing: ["result of never-scheduled"] },
     ]);

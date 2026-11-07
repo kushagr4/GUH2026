@@ -52,3 +52,15 @@ export { DEMO_AGENT_IDS, FIRE_WEATHER_HEURISTICS, createDemoAgents } from "./sce
 export type { DemoAgentId, DemoAgentOptions } from "./scenarios/demo-agents";
 export { DEMO_LINK, DEMO_PARTITION, DEMO_PHASES, demoActions, runPartitionDemo } from "./scenarios/partition-demo";
 export type { DemoCheck, PartitionDemoOptions, PartitionDemoResult, PhaseSummary } from "./scenarios/partition-demo";
+// Investigations: prepared canonical inputs in, findings and recommendations out.
+export {
+  eonetObservationsProcessor,
+  firmsObservationsFor,
+  satelliteObservationsProcessor,
+  weatherObservationsProcessor,
+  witnessFindingsProcessor,
+} from "./investigation/inputs";
+export { DEFAULT_SIMULATED_PARTITION, INVESTIGATION_AGENT_IDS, runInvestigationAgents } from "./investigation/run";
+export type { InvestigationAgentsInput, InvestigationAgentsResult, SimulatedPartition } from "./investigation/run";
+export { createRuntimeInvestigationRunner, gatherSources, subjectFor } from "./investigation/runner";
+export type { GatheredInputs, RuntimeInvestigationRun, RuntimeRunnerOptions, Subject } from "./investigation/runner";

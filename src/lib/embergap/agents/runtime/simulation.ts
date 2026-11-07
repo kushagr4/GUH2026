@@ -90,8 +90,17 @@ export type Simulation = {
   apply(action: DistributiveOmitAt<ScenarioAction>): Promise<void>;
   tick(): Promise<void>;
   runUntil(time: SimTime): Promise<void>;
-  /** Ticks until settled or `maxTime`, always bounded; returns when it settled, if it did. */
-  runUntilSettled(options: { maxTime: SimTime; checkEveryMs?: number }): Promise<{ settled: boolean; at: SimTime }>;
+  /**
+   * Ticks until settled or `maxTime`, always bounded. Also stops when `signal`
+   * aborts or `wallClockBudgetMs` of real time is spent, which keeps a run
+   * inside a serverless function's limit. Says why it stopped.
+   */
+  runUntilSettled(options: {
+    maxTime: SimTime;
+    checkEveryMs?: number;
+    signal?: AbortSignal;
+    wallClockBudgetMs?: number;
+  }): Promise<{ settled: boolean; at: SimTime; stopReason: "settled" | "max-time" | "cancelled" | "budget" }>;
   status(): Promise<RuntimeStatus>;
   scenarioLog(): ScenarioLogEntry[];
   /** Scenario, network and agent logs merged in time order. */
@@ -326,17 +335,22 @@ export function createSimulation(options: {
     async runUntil(time) {
       while (now + tickMs <= time) await tick();
     },
-    async runUntilSettled({ maxTime, checkEveryMs = 500 }) {
+    async runUntilSettled({ maxTime, checkEveryMs = 500, signal, wallClockBudgetMs }) {
+      // Real time is read only to enforce the budget; it never changes what agents do.
+      const deadline = wallClockBudgetMs === undefined ? Number.POSITIVE_INFINITY : Date.now() + wallClockBudgetMs;
       let nextCheck = now;
       while (now + tickMs <= maxTime) {
+        if (signal?.aborted) return { settled: false, at: now, stopReason: "cancelled" as const };
+        if (Date.now() > deadline) return { settled: false, at: now, stopReason: "budget" as const };
         await tick();
         if (now >= nextCheck) {
           nextCheck = now + checkEveryMs;
           const pendingActions = queue.length > 0;
-          if (!pendingActions && (await status()).settled) return { settled: true, at: now };
+          if (!pendingActions && (await status()).settled) return { settled: true, at: now, stopReason: "settled" as const };
         }
       }
-      return { settled: (await status()).settled, at: now };
+      const settled = (await status()).settled;
+      return { settled, at: now, stopReason: settled ? ("settled" as const) : ("max-time" as const) };
     },
     status,
     scenarioLog: () => scenarioLog.map((entry) => ({ ...entry })),
