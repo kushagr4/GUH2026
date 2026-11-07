@@ -3,14 +3,20 @@ import { redirect } from "next/navigation";
 import { NotConfiguredNotice } from "@/components/not-configured-notice";
 import { Button } from "@/components/ui/button";
 import { siteConfig } from "@/config/site";
-import { isDevToolsEnabled } from "@/lib/env";
+import { isDevToolsEnabled, isSupabaseConfigured } from "@/lib/env";
 import { ROUTES } from "@/lib/routes";
 import { getCurrentUser } from "@/lib/supabase/auth";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * The entry point: signed-in users go to the dashboard, everyone else to the
+ * login page. Only an unconfigured deployment, where signing in can't work,
+ * stays here to show the setup notice.
+ */
 export default async function HomePage() {
   if (await getCurrentUser()) redirect(ROUTES.dashboard);
+  if (isSupabaseConfigured()) redirect(ROUTES.login);
 
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center gap-6 px-4 py-16">
