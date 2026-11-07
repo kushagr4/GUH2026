@@ -1,7 +1,7 @@
 <!--
 Title: a Conventional Commit, because it becomes the commit on main.
   feat(auth): add social sign-in   ·   fix(realtime): wait for the authenticated subscription
-Open as a draft until the work, tests and /self-review are done. Never merge your own PR.
+Use normal, non-draft PRs in hackathon fast-build mode. No Claude /self-review or teammate approval requirement. Keep focused tests and CI. Claude never merges.
 -->
 
 ## Objective
@@ -48,9 +48,10 @@ Open as a draft until the work, tests and /self-review are done. Never merge you
 
 <!-- What's not done, not verified or deliberately left out. -->
 
-## Reviewer checklist
+## Quick integration checklist
 
-- [ ] The change does what the objective says, and nothing unrelated
-- [ ] Tests cover the new behaviour, and CI's **PR Checks** is green
-- [ ] No secrets, no service-role or secret keys in client code, and RLS isn't weakened
-- [ ] I'm not the author, and I tried the risky part myself
+- [ ] Owned files only; shared contracts/interfaces communicated
+- [ ] Targeted tests executed (list any skipped checks)
+- [ ] No secrets or privileged client keys in browser code; RLS not weakened
+- [ ] One reproducible demonstration step provided
+- [ ] Human repo owner can merge after necessary CI checks; **no mandatory review**

@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
 import { checkHeader } from "../../scripts/check-commits.mjs";
 import { checkWorkflow, workflowFiles } from "../../scripts/check-workflows.mjs";
-import { decideReviewStatus, truncate } from "../../scripts/review-status.mjs";
 
 const SHA = "3d3c42e5aac5ba805825da76410c181273ba90b1";
 
@@ -152,71 +151,3 @@ describe("the CI workflow", () => {
   });
 });
 
-describe("decideReviewStatus", () => {
-  const author = "kushagr4";
-  const headSha = "head";
-  const review = (login: string, state: string, commit_id = headSha, extra: object = {}) => ({
-    user: { login, type: "User" },
-    state,
-    commit_id,
-    author_association: "COLLABORATOR",
-    ...extra,
-  });
-  const decide = (reviews: object[], draft = false) => decideReviewStatus({ author, headSha, draft, reviews });
-
-  it("waits for a review when there is none", () => {
-    expect(decide([])).toEqual({
-      state: "pending",
-      description: "Needs an approving review from someone other than @kushagr4.",
-    });
-  });
-
-  it("passes with one approval of the latest commit", () => {
-    expect(decide([review("d3vmakes", "APPROVED")])).toMatchObject({ state: "success" });
-  });
-
-  it("treats an approval of an older commit as stale", () => {
-    expect(decide([review("d3vmakes", "APPROVED", "old")])).toMatchObject({
-      state: "pending",
-      description: expect.stringMatching(/approved an earlier commit/),
-    });
-  });
-
-  it("fails while changes are requested, even with another approval", () => {
-    const result = decide([review("d3vmakes", "CHANGES_REQUESTED"), review("teammate", "APPROVED")]);
-    expect(result).toMatchObject({ state: "failure", description: expect.stringMatching(/@d3vmakes/) });
-  });
-
-  it("uses each reviewer's latest verdict, ignoring comments", () => {
-    const reviews = [
-      review("d3vmakes", "CHANGES_REQUESTED"),
-      review("d3vmakes", "COMMENTED"),
-      review("d3vmakes", "APPROVED"),
-    ];
-    expect(decide(reviews)).toMatchObject({ state: "success" });
-  });
-
-  it("drops a dismissed review", () => {
-    expect(decide([review("d3vmakes", "APPROVED"), review("d3vmakes", "DISMISSED")])).toMatchObject({
-      state: "pending",
-    });
-  });
-
-  it("never counts the author, a bot, or someone without write access", () => {
-    const reviews = [
-      review(author, "APPROVED"),
-      review("ci-bot", "APPROVED", headSha, { user: { login: "ci-bot", type: "Bot" } }),
-      review("stranger", "APPROVED", headSha, { author_association: "CONTRIBUTOR" }),
-    ];
-    expect(decide(reviews)).toMatchObject({ state: "pending" });
-  });
-
-  it("reports a draft as not ready yet", () => {
-    expect(decide([], true)).toMatchObject({ state: "pending", description: expect.stringMatching(/Draft/) });
-  });
-
-  it("keeps descriptions within GitHub's 140-character limit", () => {
-    expect(truncate("x".repeat(200))).toHaveLength(140);
-    expect(truncate("short")).toBe("short");
-  });
-});
