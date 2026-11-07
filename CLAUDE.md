@@ -140,25 +140,31 @@ Every change reaches `main` through a focused PR with green **PR Checks** and on
 
 ## EmberGap implementation brief (active project, November 2026)
 
-**The starter-era sentence above saying there is "no competition idea" is historical. The chosen application is EmberGap.** Treat the shared starter architecture, security guidance, scripts and review gates above as binding. For the actual product design, data flow, acceptance criteria and planned code boundaries, read **`docs/architecture.md#embergap-product-architecture-greatunihack-2026`** before implementing any EmberGap feature. Do not infer that the planned modules or schema already exist.
+**The active application is EmberGap.** Treat the shared starter architecture, security guidance, scripts and review gates above as binding. For the actual product design, data flow, acceptance criteria and planned code boundaries, read **`docs/architecture.md#embergap-product-architecture-greatunihack-2026`** before implementing any EmberGap feature. Do not infer that the planned modules or schema already exist.
 
 ### Definition of success
 
 A reporter submits a safely geolocated, optional-photo **possible** wildfire observation; isolated agents separately analyse vision, thermal anomalies (NASA FIRMS), weather (Open-Meteo), EONET context and potentially independent witness reports; a fusion agent offers a transparent, auditable **review recommendation**. The system visibly continues processing locally queued tasks during a communication partition and reconciles without data loss or duplicate application afterward. All demo incidents are synthetic unless specifically marked as sourced real data. **Never describe EmberGap as an operational emergency-alert, dispatch or confirmed wildfire detection system.**
 
-### Coordination: five contributors, no shared feature branches
+### Coordination: five contributors, named ownership and split APIs
 
-| Contributor | Branch | Primary responsibility |
+The **five independent work sessions** are Claude on Mac, Claude on PC, **Danil**, **Outrolife**, and **d3vmakes**. No additional Developer A/C exists. Use independent branches and no shared working trees. Read the **definitive API and file-ownership matrix** under `docs/architecture.md#five-contributor-work-split-definitive-ownership`.
+
+| Contributor | Branch | Owns |
 | --- | --- | --- |
-| Claude Code on **Mac** (integration lead) | `feat/embergap-core` | Shared contracts, migrations, report persistence, private uploads, API surfaces, final wiring |
-| Claude Code on **PC** | `feat/embergap-data` | FIRMS, Open-Meteo, EONET adapters; normalization, caching, fixtures; Windows verification |
-| Human developer A | `feat/embergap-agents` | Independent workers, queues, network simulation, event delivery and reconciliation |
-| Human developer B | `feat/embergap-validation` | Claude Vision, independent witness correlation, evidence fusion and uncertainty explanations |
-| Human developer C | `feat/embergap-ui` | Mobile/desktop dashboard, report flow, map, agent status and browser QA |
+| **Claude Mac**, team integrator | `feat/embergap-core` | Canonical contracts and database migrations, report storage/private photo uploads, **POST /api/embergap/reports**, shared app wiring, integrating PRs |
+| **Claude PC** | `feat/embergap-data-runtime` | **Open-Meteo + EONET** adapters, autonomous worker runtime, queue transport, network partitions, idempotent reconciliation; Windows testing |
+| **Danil** | `feat/embergap-validation` | Claude Vision, witness validation, fusion rules, provenance, source uncertainty and human-review recommendations |
+| **Outrolife** | `feat/embergap-map-api` | **NASA FIRMS adapter, GET /api/embergap/map, GET /api/embergap/investigations/[id]**, plus map and dashboard/investigation UI |
+| **d3vmakes** | `feat/embergap-report-ui` | Report-submission UI, image/location inputs, loading/error states and small-scale UI QA/Playwright smoke tests |
 
-These branch names denote **suggested ownership**, not guaranteed existing branches. Create branches from updated `main`; never have both Claude sessions push to one branch. Mac owns contracts and DB migration/types; everybody else depends on those contracts and uses fixtures meanwhile. If you discover someone owns the file you need, request coordination through a PR instead of editing it independently. See the canonical boundaries in `docs/architecture.md`.
+**API ownership is exclusive.** Mac owns writing/posting reports and database contracts; Outrolife owns the read-only map and investigation APIs and FIRMS integration; PC owns weather and EONET, not FIRMS; Danil owns validation, not API routes. No parallel edits to the same route or shared contract.
 
-**Integrate in order:** shared contracts/migrations, then data and worker runtime, then validation, then UI and end-to-end wiring. Start draft PRs early; run `/self-review`, preflight and relevant local tests before requesting one independent human approval. Never approve or merge a PR yourself, bypass the git guard, or push directly to `main`.
+**Start in parallel:** Mac publishes the shared contracts PR ASAP. Meanwhile Outrolife builds FIRMS fixtures plus GET endpoints/map using deterministic mock data, d3vmakes builds the report form against a mock response, Danil builds pure validation/fusion functions on fixtures, PC builds weather/EONET adapters and worker runtime. After contract review, change imports to canonical types. Mac owns final repo integration and any shared navigation changes; don't handwave cross-branch contract differences.
+
+**Minimum manual user testing:** one 10-15 minute internal demo walkthrough with 1-2 teammates, coordinated by d3vmakes. No user studies or surveys. This does **not** relax automated unit, security/RLS, partition/reconciliation, CI, preflight or essential end-to-end tests.
+
+**Merge sequence:** contracts/migrations first, then PRs with independent data/runtime/validation/UI slices, then Mac integration and demo hardening. Each PR needs self-review, relevant checks and one separate human approval. Claude never merges/approves/pushes to main.
 
 ### Feature workflow and skills
 
