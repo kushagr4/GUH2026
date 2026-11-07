@@ -4,6 +4,7 @@ export const ROUTES = {
   signup: "/signup",
   dashboard: "/app/dashboard",
   embergap: "/app/embergap",
+  embergapNetwork: "/app/embergap/network",
   account: "/app/account",
   dev: "/dev",
 } as const;
