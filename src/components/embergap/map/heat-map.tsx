@@ -30,7 +30,7 @@ const WHEEL_ZOOM_PER_UNIT = 1 / 160;
 const PINCH_ZOOM_PER_UNIT = 1 / 40;
 /** Touch pinch: zoom faster than the finger ratio alone. */
 const TOUCH_PINCH_GAIN = 1.6;
-const CONTROL = "size-8 text-base leading-none hover:bg-muted";
+const CONTROL = "size-8 text-base leading-none hover:bg-orange-50 hover:text-orange-700 dark:hover:bg-orange-950";
 const SETTLE_MS = 500;
 
 type Layers = { investigations: boolean; anomalies: boolean };
@@ -90,9 +90,23 @@ function kernelsFor(feature: MapFeature, x: number, y: number, r: number): Kerne
   return kernels;
 }
 
+/** A "turbo"-style scale: vivid, and ordered so more heat always reads as hotter. Shared with the legend. */
+export const HEAT_STOPS: ReadonlyArray<readonly [number, string]> = [
+  [0.08, "#4662d7"],
+  [0.22, "#36aaf9"],
+  [0.36, "#1ae4b6"],
+  [0.5, "#72fe5e"],
+  [0.62, "#c8ef34"],
+  [0.74, "#faba39"],
+  [0.86, "#f66b19"],
+  [1, "#d62305"],
+];
+
+const HEAT_GRADIENT_CSS = `linear-gradient(to right, ${HEAT_STOPS.map(([at, colour]) => `${colour} ${at * 100}%`).join(", ")})`;
+
 let palette: Uint8ClampedArray | null = null;
 
-/** Blue, cyan, green, yellow, red: 256 RGBA entries. */
+/** HEAT_STOPS as 256 RGBA entries. */
 function heatPalette(): Uint8ClampedArray {
   if (palette) return palette;
   const canvas = document.createElement("canvas");
@@ -100,11 +114,7 @@ function heatPalette(): Uint8ClampedArray {
   canvas.height = 1;
   const ctx = canvas.getContext("2d")!;
   const gradient = ctx.createLinearGradient(0, 0, 256, 0);
-  gradient.addColorStop(0.15, "#2563eb");
-  gradient.addColorStop(0.4, "#06b6d4");
-  gradient.addColorStop(0.6, "#84cc16");
-  gradient.addColorStop(0.8, "#facc15");
-  gradient.addColorStop(1, "#dc2626");
+  for (const [at, colour] of HEAT_STOPS) gradient.addColorStop(at, colour);
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, 256, 1);
   palette = ctx.getImageData(0, 0, 256, 1).data;
@@ -112,7 +122,7 @@ function heatPalette(): Uint8ClampedArray {
 }
 
 /** Opacity per intensity: rises gently from 0, so edges fade out instead of ending in a ring. */
-const OPACITY = Array.from({ length: 256 }, (_, i) => Math.round(Math.min(200, 255 * (i / 255) ** 0.85)));
+const OPACITY = Array.from({ length: 256 }, (_, i) => Math.round(Math.min(228, 255 * (i / 255) ** 0.72)));
 
 function drawHeat(canvas: HTMLCanvasElement, kernels: Kernel[]) {
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
@@ -453,7 +463,9 @@ export function HeatMap({
             onClick={() => showRegion(item)}
             className={cn(
               "rounded-md px-2.5 py-1 text-xs font-medium",
-              item.id === regionId && userCamera === null ? "bg-foreground text-background" : "hover:bg-muted",
+              item.id === regionId && userCamera === null
+                ? "bg-orange-600 text-white"
+                : "hover:bg-orange-50 hover:text-orange-800 dark:hover:bg-orange-950",
             )}
           >
             {item.name}
@@ -490,8 +502,8 @@ export function HeatMap({
           <span className="text-muted-foreground">Low</span>
           <span
             aria-hidden
-            className="h-2 w-28 rounded-full"
-            style={{ background: "linear-gradient(to right, #2563eb, #06b6d4, #84cc16, #facc15, #dc2626)" }}
+            className="h-2 w-32 rounded-full"
+            style={{ background: HEAT_GRADIENT_CSS }}
           />
           <span className="text-muted-foreground">High</span>
         </div>
@@ -509,7 +521,11 @@ export function HeatMap({
               onClick={() => setLayers((previous) => ({ ...previous, [key]: !previous[key] }))}
               className={cn(
                 "rounded-full border px-2 py-0.5",
-                layers[key] ? "border-foreground/30 bg-foreground/5" : "text-muted-foreground line-through opacity-60",
+                layers[key]
+                  ? key === "investigations"
+                    ? "border-rose-300 bg-rose-50 text-rose-800 dark:border-rose-900 dark:bg-rose-950 dark:text-rose-200"
+                    : "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200"
+                  : "text-muted-foreground line-through opacity-60",
               )}
             >
               {text}
