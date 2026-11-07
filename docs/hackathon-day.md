@@ -75,7 +75,7 @@ npm run doctor
 npm run db:new -- core_tables
 ```
 
-3. **Apply it.** Open a PR. Once the owner has reviewed and it's merged, the owner runs:
+3. **Apply it.** Open a PR. Once the relevant migration PR has passed necessary checks and the human owner has merged it, the owner runs:
 
 ```bash
 npm run db:plan
@@ -96,7 +96,7 @@ npm run db:types
    - Code goes in `src/features/<feature>/`. Copy `src/features/account/` as the pattern.
    - Add navigation in `src/config/site.ts`.
 
-Ask Claude Code to do this directly. `CLAUDE.md` tells it the conventions and security rules, and it follows `/feature-dev`: a feature branch, tests, a draft PR and `/self-review`, then a teammate's approval.
+Ask Claude Code to do this directly. `CLAUDE.md` tells it the conventions and security rules, and it follows `/feature-dev`: implement on an owned branch, run focused tests, open a normal PR and continue. No mandatory Claude or teammate review.
 
 ## Building blocks
 
@@ -128,14 +128,14 @@ Commands you'll use most:
 | Situation | Command |
 | --- | --- |
 | Is it the backend or my code? | Open `/dev`, or run `npm run local:status` |
-| Before marking a PR ready | `npm run preflight` |
+| Before a final integration or demo handoff | `npm run preflight` (or report CI and any unavailable steps) |
 | New table or column | `npm run db:new -- <name>` |
 | Migration status (owner) | `npm run db:status` |
 | Security check (owner) | `npm run db:audit` |
 
 Working practices:
 
-- Small PRs, merged often. `main` is always demoable. Every PR needs one approval from a teammate, so review each other's PRs within about 15 minutes. See [development-workflow.md](development-workflow.md).
+- Small PRs, merged often. `main` stays demoable. No mandatory Claude self-review or teammate approval. The human repo owner merges when relevant CI and functional checks are satisfactory. See [development-workflow.md](development-workflow.md).
 - Schema changes are additive, and go through the owner. See [team-workflow.md](team-workflow.md).
 - If something's broken for everyone, check `/dev` first, then the Supabase dashboard.
 - Avoid late, risky changes. Freeze features at about 17:00.
