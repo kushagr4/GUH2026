@@ -21,7 +21,7 @@ This file governs **coding assistants** working in the GUH2026 repository, in ad
 
 ### Five named sessions, strict API and UI ownership
 
-The only contributors are **Claude Mac**, **Claude PC**, **Danil**, **Outrolife** and **d3vmakes**. Use separate branches and local Docker databases. There is no separate Developer A or C. Read `docs/architecture.md` for the authoritative paths, interfaces and merge order, and `docs/embergap-api-ownership.md` for exact upstream APIs, internal routes, environment keys and names.
+The only contributors are **Claude Mac**, **Claude PC**, **Danil**, **Outrolife** and **d3vmakes**. Use separate branches. Everyone develops against the shared hosted Supabase project (RLS keeps users' data apart; no Docker). There is no separate Developer A or C. Read `docs/architecture.md` for the authoritative paths, interfaces and merge order, and `docs/embergap-api-ownership.md` for exact upstream APIs, internal routes, environment keys and names.
 
 | Role / branch | Own files and APIs | Deliverable |
 | --- | --- | --- |
@@ -42,10 +42,10 @@ The only contributors are **Claude Mac**, **Claude PC**, **Danil**, **Outrolife*
 - Feature or refactor: `.claude/skills/feature-dev/SKILL.md`; examine similar feature and add contract-level tests.
 - Bug or failed integration: `.claude/skills/bugfix/SKILL.md`; reproduce with a failing test first.
 - PR handoff: run focused checks, commit, push and open a normal PR. Do not run `/self-review`, `/code-review` or spawn review agents unless explicitly requested.
-- Database changes: `docs/team-workflow.md`, `docs/docker-development.md`, `docs/architecture.md`; migrations only, local tests before owner's hosted rollout.
+- Database changes: `docs/team-workflow.md`, `docs/supabase-cloud-development.md`, `docs/architecture.md`; additive migration files only, `npm run db:lint`, then the owner's hosted rollout.
 - Third-party data: `docs/integrations.md`; official API docs, retries/timeouts, honest source freshness, no live network in unit tests.
 - Security audit: `docs/ci-and-reviews.md`; RLS, private storage, secrets scan and client-bundle scan.
-- Demo QA: `docs/hackathon-day.md`, `npm run preflight`, `npm run local:test`; validate Mac and PC portability where applicable.
+- Demo QA: `docs/hackathon-day.md`, `npm run preflight`, and the hosted integration and E2E tests when `.env.test.local` is configured; validate Mac and PC portability where applicable.
 
 ### Runtime agent contract and evidence quality
 
@@ -70,6 +70,6 @@ Use labelled synthetic scenarios as ground truth for evaluation. Baseline and di
 
 ### Branch, verification and merge rules
 
-Before writing: `git status`, confirm branch and ownership, read shared contracts. After changes: targeted unit tests, `npm run typecheck`, `npm run lint` and `npm run preflight` when feasible; run `npm run local:test` for affected DB/API journeys. Keep manual user testing to the short internal demo walkthrough. Use Conventional Commits and **normal PRs**. **No Claude review, review agent, self-review marker, or required teammate approval.** The human repo owner merges when ready; Claude never merges, approves or pushes to `main`. State any checks that were skipped. Preserve CI, auth, RLS, secrets and database-safety protections.
+Before writing: `git status`, confirm branch and ownership, read shared contracts. After changes: targeted unit tests, `npm run typecheck`, `npm run lint` and `npm run preflight` when feasible; run the hosted integration tests (`npm run test:integration`, disposable users, only with `.env.test.local`) for affected DB/API journeys. Keep manual user testing to the short internal demo walkthrough. Use Conventional Commits and **normal PRs**. **No Claude review, review agent, self-review marker, or required teammate approval.** The human repo owner merges when ready; Claude never merges, approves or pushes to `main`. State any checks that were skipped. Preserve CI, auth, RLS, secrets and database-safety protections.
 
-Avoid destructive database resets, Docker-volume deletion, bulk worktree cleaning or any alteration of another contributor's working tree without their explicit approval.
+Avoid destructive database operations on the shared hosted project, bulk worktree cleaning or any alteration of another contributor's working tree or data without their explicit approval.
