@@ -65,7 +65,8 @@ function main() {
   if (!existsSync(CLI)) fail("Install project dependencies with npm ci.");
   const cmd = process.argv[2];
   if (cmd === "up" || cmd === "dev") {
-    if (cli(["start"]).status !== 0) fail("Could not start the Docker-based Supabase stack.");
+    // The CLI may print local service_role/JWT secrets on start. Capture output.
+    if (cli(["start"], true).status !== 0) fail("Could not start Docker Supabase. Check Docker Desktop, available disk space and ports.");
     generate(getStatus());
     if (cmd === "dev") {
       console.log("Starting Next.js on http://localhost:3000");
