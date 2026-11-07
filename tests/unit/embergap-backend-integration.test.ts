@@ -166,3 +166,34 @@ describe("firmsPassProcessor", () => {
     expect(result.findings?.[0]).toMatchObject({ assessment: "inconclusive", reasonCodes: ["source_stale"] });
   });
 });
+
+/* ------------------------------------------------------------------------- */
+/* Deployment status: why a report can't be saved                            */
+/* ------------------------------------------------------------------------- */
+
+describe("getEmbergapStatus", () => {
+  function statusClient(tableError: { code: string } | null, bucketError: { message: string } | null) {
+    return {
+      from: () => ({ select: () => ({ limit: async () => ({ error: tableError }) }) }),
+      storage: { from: () => ({ list: async () => ({ error: bucketError }) }) },
+    } as never;
+  }
+
+  it("names missing migrations and a missing secret key as the fixes", async () => {
+    const { getEmbergapStatus } = await import("@/features/embergap/status");
+    orchestrator.canRunAgents.mockReturnValueOnce(false);
+    const status = await getEmbergapStatus(statusClient({ code: "PGRST205" }, { message: "Bucket not found" }), "u");
+    expect(status.ok).toBe(false);
+    expect(status.database.reports.detail).toMatch(/migrations are not applied/);
+    expect(status.database.photo_bucket.ok).toBe(false);
+    expect(status.fix.join(" ")).toMatch(/npm run db:push/);
+    expect(status.fix.join(" ")).toMatch(/SUPABASE_SECRET_KEY/);
+  });
+
+  it("is ok when the tables and bucket exist and agents can run", async () => {
+    const { getEmbergapStatus } = await import("@/features/embergap/status");
+    const status = await getEmbergapStatus(statusClient(null, null), "u");
+    expect(status.ok).toBe(true);
+    expect(status.fix).toEqual([]);
+  });
+});
