@@ -12,7 +12,6 @@ import {
   type Observation,
   type SourceAvailability,
 } from "@/lib/embergap/contracts";
-import type { InvestigationRunner } from "@/features/embergap/orchestrator";
 import {
   DEFAULT_SIMULATED_PARTITION,
   createMemoryRuntimeStore,
@@ -260,10 +259,10 @@ describe("the InvestigationRunner adapter", () => {
     isSynthetic: false,
   };
 
-  it("has Mac's InvestigationRunner shape and runs the agents on gathered inputs", async () => {
+  it("runs the legacy runtime adapter on gathered inputs", async () => {
     const store = createMemoryRuntimeStore();
     const gather = vi.fn(async () => ({ observations: [weatherObservation, firmsDetection], sourceAvailability: [eonetNone] }));
-    const runner: InvestigationRunner = createRuntimeInvestigationRunner({ gather, witnessFindings: async () => [witnessFinding] });
+    const runner = createRuntimeInvestigationRunner({ gather, witnessFindings: async () => [witnessFinding] });
     await runner({
       investigationId: INV,
       reports: [report],
