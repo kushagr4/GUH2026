@@ -233,6 +233,9 @@ Do not expose exact reporter locations, photo GPS EXIF or private identities thr
 
 ## API adapters and keys
 
+**Exact upstream URLs, route names, required credentials and developer assignments:** [EmberGap API ownership](embergap-api-ownership.md). This is the canonical integration checklist; do not duplicate an API owned by another teammate.
+
+
 - **NASA FIRMS**: server-only `NASA_FIRMS_MAP_KEY`; query time/bounds; preserve sensor, original coordinates, observation timestamps, retrieval timestamps and API failures. Distinguish thermal anomalies from confirmed fires.
 - **Open-Meteo**: weather and relevant observation/forecast context; preserve whether a reading is observed, modelled or forecast, with timestamps. Check free-use/licence terms before deployment.
 - **NASA EONET v3**: contextual natural-event records with their age/coverage. Do not confuse a lack of event records with a negative observation.
