@@ -83,7 +83,7 @@ describe("POST /api/embergap/reports", () => {
     const json = reportSubmissionResponseSchema.parse(await response.json());
     expect(json).toMatchObject({ reportId: REPORT_ID, investigationStatus: "unreviewed", verification: "unverified", replayed: false });
     expect(submitReport).toHaveBeenCalledWith({ fake: "client" }, userId, expect.objectContaining({ description: body.description, media: null }));
-    expect(scheduleInvestigation).toHaveBeenCalledWith(INVESTIGATION_ID);
+    expect(scheduleInvestigation).toHaveBeenCalledWith(INVESTIGATION_ID, { onlyIfIncomplete: false });
   });
 
   it("returns 200 for a replayed clientRequestId", async () => {
@@ -91,7 +91,8 @@ describe("POST /api/embergap/reports", () => {
     const response = await post(goodBody());
     expect(response.status).toBe(200);
     expect((await response.json()).replayed).toBe(true);
-    expect(scheduleInvestigation).not.toHaveBeenCalled();
+    // Only restarts a run that never finished (for example, cut short by Vercel).
+    expect(scheduleInvestigation).toHaveBeenCalledWith(INVESTIGATION_ID, { onlyIfIncomplete: true });
   });
 
   it("rejects a body that isn't JSON", async () => {

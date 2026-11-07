@@ -19,7 +19,8 @@ Add these under **Settings > Environment Variables**. Mark everything except the
 | `SUPABASE_SECRET_KEY` | Production (and Preview if you demo there) | For agents | Server-only, **bypasses RLS**. Agent runs need it to record findings. Without it reports still work and investigations wait |
 | `ANTHROPIC_API_KEY` | Production, Preview | Optional | Claude Vision and AI routes. Server-only |
 | `AI_PROVIDER` | Any | Optional | `mock` for offline AI in a demo without a key |
-| `NASA_FIRMS_MAP_KEY` | Production, Preview | Optional | Live FIRMS. Without it, labelled synthetic fixtures are used |
+| `NASA_FIRMS_MAP_KEY` | Production, Preview | Optional | Live FIRMS, with `EMBERGAP_FIRMS_MODE=live`. Without both, the map shows labelled synthetic fixtures and real reports record satellite data as unavailable |
+| `EMBERGAP_FIRMS_MODE` | Production, Preview | Optional | `live` to query FIRMS. Not secret |
 | Sponsor keys (`ELEVENLABS_API_KEY`, `N8N_*`, `FIRECRAWL_API_KEY`, `GITHUB_API_TOKEN`) | As needed | Optional | Server-only, see `.env.example` |
 
 Don't set `ENABLE_DEV_TOOLS`, so `/dev` stays hidden in production. `NEXT_PUBLIC_*` values are built in at build time: redeploy after changing them. Open-Meteo and NASA EONET need no key.
@@ -36,7 +37,7 @@ Deploy, then:
 
 1. Open the site, sign up, and sign in.
 2. `/api/health` reports `supabaseConfigured: true`, and `/dev` returns 404.
-3. Submit a report. It returns 201 and an `unreviewed` investigation. With `SUPABASE_SECRET_KEY` set, queued tasks and findings appear on the investigation within seconds.
+3. Submit a report. It returns 201 and an `unreviewed` investigation. With `SUPABASE_SECRET_KEY` set, within seconds `GET /api/embergap/investigations/<id>` shows six `task_queued` events (five sources and fusion), a finding from each of witness, vision, satellite, weather and fusion, the sources' observations, a `status_changed` "Automated assessment finished" event and the fusion agent's recommended status. Without `EMBERGAP_FIRMS_MODE=live` and a FIRMS key, satellite is recorded as "not configured"; without a live vision model, a photo is recorded as "not analysed". Both are gaps, never invented results. If a run is cut short, `POST /api/embergap/runs` with `{ "investigationId": "<id>" }` restarts it.
 
 ## How it runs on Vercel
 
