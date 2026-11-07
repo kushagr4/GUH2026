@@ -23,8 +23,10 @@ From [greatunihack.com](https://greatunihack.com), checked 5 November 2026. The 
 Migration owner:
 
 ```bash
-npm run health
+npm run db:status
 ```
+
+This compares the migration files with the hosted project's history, so it also shows the project is reachable. (`npm run health` checks whichever project `.env.local` points at, which is now usually your local one.)
 
 - Sign in to the Supabase dashboard, and confirm the project is active. Free projects pause after a week without activity.
 - Create one demo account per teammate through `/signup`, and record them somewhere private.
@@ -125,7 +127,7 @@ Commands you'll use most:
 
 | Situation | Command |
 | --- | --- |
-| Is it the backend or my code? | Open `/dev`, or run `npm run health` |
+| Is it the backend or my code? | Open `/dev`, or run `npm run local:status` |
 | Before marking a PR ready | `npm run preflight` |
 | New table or column | `npm run db:new -- <name>` |
 | Migration status (owner) | `npm run db:status` |

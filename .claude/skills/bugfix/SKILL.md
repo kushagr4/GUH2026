@@ -23,7 +23,7 @@ environment.
 
 - Read the failing code path end to end, the related tests and the config.
 - Use the evidence the repo gives you: `/dev` diagnostics (is it the backend or
-  the code?), `npm run local:status` (or `npm run health` for hosted), server logs, the browser console, and the
+  the code?), `npm run local:status`, server logs, the browser console, and the
   Supabase logs and advisors through the read-only MCP.
 - Keep two lists, **observed** (seen in a log, a test or a reproduction) and
   **hypotheses** (not yet proven). Only observed facts justify a change.
