@@ -633,17 +633,18 @@ export const evidenceStrengthSchema = z.enum(EVIDENCE_STRENGTHS);
 export type EvidenceStrength = z.infer<typeof evidenceStrengthSchema>;
 
 const VERDICT_WORDS =
-  /(^|[_.])(confirm|confirmed|confirms|verified|verify|authentic|certain|certainty|probability|percent|proof|proven)([_.]|$)/;
+  /(^|[_.-])(confirm|confirmed|confirms|verified|verify|authentic|certain|certainty|probability|percent|proof|proven)([_.-]|$)/i;
 
 /**
- * snake_case, optionally namespaced by agent ("witness.single_report"), so codes
- * stay machine-readable. Prefer the well-known codes below. Codes that claim a
+ * snake_case, optionally namespaced by agent and up to four segments
+ * ("witness.single_report", "fusion.rule.S2-two-independent"), so codes stay
+ * machine-readable. Prefer the well-known codes below. Codes that claim a
  * verdict ("fire_confirmed", "vision.image_authentic") are rejected.
  */
 export const reasonCodeSchema = z
   .string()
   .max(64)
-  .regex(/^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)?$/, "Use a snake_case reason code, optionally agent-namespaced.")
+  .regex(/^[a-z][a-z0-9_]*(\.[A-Za-z0-9][A-Za-z0-9_-]*){0,3}$/, "Use a snake_case reason code, optionally agent-namespaced.")
   .refine((code) => code.length >= 2, { message: "Use a snake_case reason code." })
   .refine((code) => !VERDICT_WORDS.test(code), { message: "Reason codes describe evidence; they never claim a verdict." });
 

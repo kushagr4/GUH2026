@@ -411,7 +411,9 @@ describe("agent findings encode the scientific limits", () => {
   it("accepts agent-namespaced reason codes, but not namespaced verdicts", () => {
     expect(agentFindingSchema.safeParse(finding({ reasonCodes: ["witness.single_report"] })).success).toBe(true);
     expect(agentFindingSchema.safeParse(finding({ reasonCodes: ["vision.image_authentic"] })).success).toBe(false);
-    expect(agentFindingSchema.safeParse(finding({ reasonCodes: ["witness.a.b"] })).success).toBe(false);
+    expect(agentFindingSchema.safeParse(finding({ reasonCodes: ["fusion.rule.S2-two-independent"] })).success).toBe(true);
+    expect(agentFindingSchema.safeParse(finding({ reasonCodes: ["fusion.rule.Fire-Confirmed"] })).success).toBe(false);
+    expect(agentFindingSchema.safeParse(finding({ reasonCodes: ["a.b.c.d.e"] })).success).toBe(false);
   });
 
   it("keeps plain-language caveats beside the limitation codes", () => {

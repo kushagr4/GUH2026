@@ -89,6 +89,21 @@ Errors use `{ "error": { "code", "message", "fieldErrors"?, "retryAfterSeconds"?
 3. Upload with the browser Supabase client to `reportMediaObjectPath(userId, mediaId, "image/jpeg")` in bucket `REPORT_MEDIA_BUCKET`, with `upsert: false`. Get `userId` from `requireUser()` in the page and pass it to the form as a prop. Don't use `ownerObjectPath`. On a retry, an "already exists" error means the photo is already uploaded.
 4. POST the report with `media: { mediaId, mimeType: "image/jpeg" }`.
 
+## Moving the validators and fusion from #6 onto the contracts
+
+`src/lib/embergap/agents/validators/types.ts` was written to be swapped for re-exports from here. I checked the #6 fusion scenarios against the canonical schemas. This is what changes (Danil's files, Danil's call):
+
+| Provisional | Canonical |
+| --- | --- |
+| IDs such as `syn-<inv>-<id>` | UUIDs. Use the scenario's `investigationId` and `reportIds` from `SYNTHETIC_SCENARIOS`, and `syntheticId("danil/<scenario>/<thing>")` for finding IDs |
+| `limitations: string[]` (sentences) | `limitations` holds codes from `LIMITATION_CODES`. Keep the sentences in `limitationNotes`. Mapping: the vision base caveat becomes the three `image_*_unverifiable` codes. `notCalibrated` becomes `model_output_uncalibrated`. `absenceIsWeak` becomes `no_detection_is_not_absence`. `gapUnavailable` becomes `source_unavailable`. `gapInvalid` becomes `model_output_invalid`. `claimStripped` becomes `unverifiable_claim_removed`. `descriptionWithheld` becomes `description_withheld`. For witness: unverified claims become `human_report_unverified`, approximate coordinates become `low_spatial_precision`, heuristic independence becomes `possible_shared_origin`, uncalibrated thresholds become `heuristic_thresholds_uncalibrated`, and no reports becomes `no_detection_is_not_absence` |
+| Assessments are only `supports`, `contradicts` and `inconclusive` | Adds `context`. Weather findings are `context`, and the fusion finding is always `context` with `strength: null`. Its advice goes in `recommendation` (`recommendedStatus` can be `investigating`, `needs_human_review` or `insufficient_evidence`, plus `reviewPriority`, `independentSourceCount`, supporting and contradicting finding IDs, `evidenceGaps` and `possibleDuplicateReportIds`) |
+| No `strength` | `supports` and `contradicts` need `strength` (`weak`, `moderate` or `strong`). Fusion's "none" means `strength: null` |
+| `WitnessReport` | `agentReportSchema`: `reporterId` becomes `reporterKey` (opaque), `locationPrecisionM` becomes `location.uncertaintyMeters`, and `photoSha256` becomes `media.sha256` |
+| Missing fields | Add `isSynthetic`. `reportId` and `limitationNotes` are optional (`AgentFindingInput`) |
+
+Reason codes such as `witness.single_report` and `fusion.rule.S2-two-independent` are valid as they are.
+
 ## Status of the backend
 
 The database schema, the POST route, photo verification and the read repository are in the stacked PR on `feat/embergap-core`. Until it merges, mock against the shapes above and the scenarios in `SYNTHETIC_SCENARIOS`.
