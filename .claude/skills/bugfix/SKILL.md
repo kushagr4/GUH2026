@@ -1,6 +1,6 @@
 ---
 name: bugfix
-description: GUH2026's structured debugging workflow - reproduce, investigate, isolate the root cause, add a regression test that fails first, apply the smallest fix, verify, review, and submit a focused fix PR. Load before changing code to fix anything broken. Triggers on bug, broken, error, failing, crash, regression, doesn't work, stopped working, wrong result, flaky, 500, exception, stack trace, CI failure.
+description: GUH2026's structured debugging workflow - reproduce, investigate, isolate the root cause, add a regression test that fails first, apply the smallest fix, verify, and submit a focused fix PR. Load before changing code to fix anything broken. Triggers on bug, broken, error, failing, crash, regression, doesn't work, stopped working, wrong result, flaky, 500, exception, stack trace, CI failure.
 ---
 
 # Fixing a bug in GUH2026
@@ -63,16 +63,15 @@ environment.
 - Re-run the original reproduction from step 1 and confirm the symptom is gone.
 - If a command keeps failing, stop retrying and read why it failed.
 
-## 7. Review
+## 7. Quick handoff check
 
-- Run `/self-review`, and fix every Critical and Important finding.
-- Check the diff contains only the fix and its test, with no stray debugging code.
+Confirm the failing regression now passes and the relevant diff contains only the bug fix. Do not invoke /self-review or launch a reviewer agent unless explicitly requested. Keep auth, RLS, secrets and irreversible data changes safe.
 
 ## 8. Submit
 
 - Branch `fix/<issue>-<short-name>` (or `fix/<short-name>`), and a title like
   `fix(realtime): wait for the authenticated subscription`.
-- Open a draft PR, mark it ready after the review, and request one human reviewer.
+- Open a normal PR with the focused fix and test results. No Claude self-review or teammate approval is required in hackathon mode.
 - The description states the **root cause**, the fix, and the evidence: the test
   failing before and passing after, and the reproduction re-run.
 - Never merge it yourself.
