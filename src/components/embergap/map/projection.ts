@@ -3,7 +3,7 @@ import type { Bbox } from "@/lib/embergap/contracts";
 /** Web Mercator, as used by OpenStreetMap tiles. */
 export const TILE_SIZE = 256;
 export const MIN_ZOOM = 4;
-export const MAX_ZOOM = 16;
+export const MAX_ZOOM = 18;
 const MAX_LAT = 85.05112878;
 
 export type Camera = { latitude: number; longitude: number; zoom: number };
@@ -100,9 +100,15 @@ export function viewBbox(camera: Camera, size: Size): Bbox {
 
 export type Tile = { key: string; url: string; x: number; y: number; size: number };
 
-/** Tiles covering the view, in screen pixels. Uses the nearest whole zoom, scaled. */
+const SUBDOMAINS = "abcd";
+
+/**
+ * Tiles covering the view, in screen pixels. Uses the next whole zoom up, so
+ * tiles are only ever scaled down (sharp), never up (blurry). `{s}` in the
+ * template is replaced with a/b/c/d to spread requests across hosts.
+ */
 export function tilesFor(camera: Camera, size: Size, template: string): Tile[] {
-  const tileZoom = Math.round(camera.zoom);
+  const tileZoom = Math.min(20, Math.ceil(camera.zoom - 1e-9));
   const scale = 2 ** (camera.zoom - tileZoom);
   const tilePx = TILE_SIZE * scale;
   const count = 2 ** tileZoom;
@@ -118,7 +124,11 @@ export function tilesFor(camera: Camera, size: Size, template: string): Tile[] {
       const wrappedX = ((x % count) + count) % count;
       tiles.push({
         key: `${tileZoom}/${x}/${y}`,
-        url: template.replace("{z}", String(tileZoom)).replace("{x}", String(wrappedX)).replace("{y}", String(y)),
+        url: template
+          .replace("{s}", SUBDOMAINS[(wrappedX + y) % SUBDOMAINS.length]!)
+          .replace("{z}", String(tileZoom))
+          .replace("{x}", String(wrappedX))
+          .replace("{y}", String(y)),
         x: Math.round(x * tilePx - originX),
         y: Math.round(y * tilePx - originY),
         size: Math.ceil(tilePx) + 1,

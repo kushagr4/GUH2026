@@ -152,3 +152,37 @@ export function formatUtc(iso: string | null): string {
 export function humanizeCode(code: string): string {
   return code.replace(/[_.]/g, " ").replace(/\s+/g, " ").trim();
 }
+
+/** Accent colours (Tailwind classes) so each source, agent and verdict is recognisable at a glance. */
+export const SOURCE_ACCENT: Record<SourceKind, string> = {
+  firms: "border-t-orange-500",
+  weather: "border-t-sky-500",
+  eonet: "border-t-emerald-500",
+  vision: "border-t-violet-500",
+  human: "border-t-slate-400",
+};
+
+export const ASSESSMENT_ACCENT: Record<Assessment, string> = {
+  supports: "border-l-amber-500",
+  contradicts: "border-l-sky-500",
+  inconclusive: "border-l-slate-300 dark:border-l-slate-600",
+  context: "border-l-slate-300 dark:border-l-slate-600",
+};
+
+export const ACTOR_DOT: Record<EventActor, string> = {
+  vision: "bg-violet-500",
+  satellite: "bg-orange-500",
+  weather: "bg-sky-500",
+  witness: "bg-emerald-500",
+  fusion: "bg-rose-500",
+  system: "bg-slate-400",
+  reporter: "bg-slate-500",
+  reviewer: "bg-slate-700",
+};
+
+export function priorityAccent(priority: ReviewPriority | null): string {
+  if (priority === "high") return "border-l-red-500";
+  if (priority === "medium") return "border-l-yellow-400";
+  if (priority === "low") return "border-l-sky-500";
+  return "border-l-slate-300";
+}

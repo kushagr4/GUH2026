@@ -876,13 +876,14 @@ export class RuntimeAgent {
         localRecords.set(parsed.data.id, event.id);
         unhashed.push(event);
       }
+      const references = new Set(result.references ?? []);
       for (const draft of findings) {
         const evidenceIds = draft.evidenceIds ?? [];
         const causes: string[] = [];
         for (const id of evidenceIds) {
           const eventId = localRecords.get(id) ?? this.#records.get(id);
-          if (!eventId) return null; // Cites evidence this agent does not hold.
-          causes.push(eventId);
+          if (eventId) causes.push(eventId);
+          else if (!references.has(id)) return null; // Cites evidence this agent does not hold.
         }
         const base = head(unhashed.length, [...new Set(causes)]);
         const parsed = agentFindingSchema.safeParse({

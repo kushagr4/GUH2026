@@ -69,7 +69,8 @@ export async function POST(request: Request) {
   }
 
   const response = reportSubmissionResponseSchema.parse({ ...result.data, verification: "unverified" });
-  // A replay was already scheduled when it was first created.
-  if (!result.data.replayed) scheduleInvestigation(result.data.investigationId);
+  // A replay restarts the agents only if the first run never finished (for
+  // example, Vercel cut it short). Runs are idempotent either way.
+  scheduleInvestigation(result.data.investigationId, { onlyIfIncomplete: result.data.replayed });
   return apiJson(result.data.replayed ? 200 : 201, response);
 }

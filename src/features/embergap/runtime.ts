@@ -209,3 +209,13 @@ export async function loadReportImage(
   if (error || !data) return null;
   return { mimeType: row.mime_type as ReportMediaMimeType, bytes: new Uint8Array(await data.arrayBuffer()) };
 }
+
+/**
+ * The private Storage reference of a report photo, for a server-side vision
+ * analyzer (Danil), which loads the bytes itself. Never a URL, signed or not.
+ */
+export async function loadMediaRef(admin: AdminClient, mediaId: Id): Promise<{ imageRef: string; mimeType: ReportMediaMimeType } | null> {
+  const { data: row } = await admin.from("report_media").select("object_path, mime_type").eq("id", mediaId).maybeSingle();
+  if (!row) return null;
+  return { imageRef: row.object_path, mimeType: row.mime_type as ReportMediaMimeType };
+}

@@ -52,8 +52,13 @@ export type TaskDraft = { id: string; kind: string; input: unknown; investigatio
 export type ProcessorResult = {
   /** Canonical observations, for example from a SourceAdapter. Their ids are the source's own. */
   observations?: Observation[];
-  /** evidenceIds must name observations in this result, or records this agent already holds. */
+  /** evidenceIds must name observations in this result, records this agent already holds, or `references`. */
   findings?: FindingDraft[];
+  /**
+   * UUIDs of records that live outside the runtime (a report, its media) and
+   * that findings in this result may cite as evidence, as the contract allows.
+   */
+  references?: string[];
   /** More work for this same agent. */
   followUps?: TaskDraft[];
 };

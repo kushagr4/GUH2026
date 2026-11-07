@@ -12,7 +12,8 @@ import {
   zoomAround,
 } from "@/components/embergap/map/projection";
 import { confidenceLabel, formatDuration, formatUtc, humanizeCode } from "@/components/embergap/dashboard/labels";
-import { DEFAULT_REGION, DEMO_REGIONS } from "@/lib/embergap/read/regions";
+import { DEFAULT_REGION, DEMO_REGIONS, SCENARIO_REGION } from "@/lib/embergap/read/regions";
+import { demoFirmsDetections } from "@/lib/embergap/sources/firms/fixtures";
 
 const SIZE = { width: 1000, height: 650 };
 
@@ -31,8 +32,8 @@ describe("map camera", () => {
     }
   });
 
-  it("the default region shows every shared scenario", () => {
-    const camera = fitCamera(DEFAULT_REGION.bbox, SIZE);
+  it("the scenario region shows every shared scenario", () => {
+    const camera = fitCamera(SCENARIO_REGION.bbox, SIZE);
     for (const scenario of SYNTHETIC_SCENARIOS) {
       const { x, y } = toScreen(camera, SIZE, scenario.report.latitude, scenario.report.longitude);
       expect(x, scenario.id).toBeGreaterThan(0);
@@ -40,6 +41,17 @@ describe("map camera", () => {
       expect(y, scenario.id).toBeGreaterThan(0);
       expect(y, scenario.id).toBeLessThan(SIZE.height);
     }
+  });
+
+  it("the default view is Campania wine country, with synthetic detections in it", () => {
+    expect(DEFAULT_REGION.id).toBe("campania-vineyards");
+    const camera = fitCamera(DEFAULT_REGION.bbox, SIZE);
+    const inView = demoFirmsDetections().filter((detection) => {
+      const { x, y } = toScreen(camera, SIZE, detection.latitude, detection.longitude);
+      return x > 0 && x < SIZE.width && y > 0 && y < SIZE.height;
+    });
+    expect(inView.length).toBeGreaterThanOrEqual(5);
+    expect(inView.every((detection) => detection.isSynthetic)).toBe(true);
   });
 
   it("round-trips screen and map coordinates", () => {
@@ -80,12 +92,14 @@ describe("map camera", () => {
 
   it("covers the whole view with tiles at fractional zoom", () => {
     const camera = { ...fitCamera(DEFAULT_REGION.bbox, SIZE), zoom: 9.4 };
-    const tiles = tilesFor(camera, SIZE, "https://tile.example/{z}/{x}/{y}.png");
+    const tiles = tilesFor(camera, SIZE, "https://{s}.tile.example/{z}/{x}/{y}.png");
     expect(Math.min(...tiles.map((t) => t.x))).toBeLessThanOrEqual(0);
     expect(Math.max(...tiles.map((t) => t.x + t.size))).toBeGreaterThanOrEqual(SIZE.width);
     expect(Math.min(...tiles.map((t) => t.y))).toBeLessThanOrEqual(0);
     expect(Math.max(...tiles.map((t) => t.y + t.size))).toBeGreaterThanOrEqual(SIZE.height);
-    expect(tiles[0]?.url).toMatch(/^https:\/\/tile\.example\/9\/\d+\/\d+\.png$/);
+    // Rounds the tile zoom up, so tiles are only ever scaled down (sharp).
+    expect(tiles[0]?.url).toMatch(/^https:\/\/[abcd]\.tile\.example\/10\/\d+\/\d+\.png$/);
+    expect(Math.max(...tiles.map((t) => t.size))).toBeLessThanOrEqual(257);
   });
 });
 
