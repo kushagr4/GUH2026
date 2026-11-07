@@ -31,6 +31,8 @@ const FORBIDDEN = [
   { label: "the ElevenLabs client", pattern: /api\.elevenlabs\.io/ },
   { label: "the N8N_WEBHOOK_SECRET name", pattern: /N8N_WEBHOOK_SECRET/ },
   { label: "the N8N_CALLBACK_SECRET name", pattern: /N8N_CALLBACK_SECRET/ },
+  { label: "the NASA_FIRMS_MAP_KEY name", pattern: /NASA_FIRMS_MAP_KEY/ },
+  { label: "the NASA FIRMS client", pattern: /firms\.modaps\.eosdis\.nasa\.gov\/api/ },
 ];
 
 // Also search for the literal values on this machine, whatever their format.
@@ -44,6 +46,7 @@ const SECRET_VALUES = [
   "ELEVENLABS_API_KEY",
   "N8N_WEBHOOK_SECRET",
   "N8N_CALLBACK_SECRET",
+  "NASA_FIRMS_MAP_KEY",
 ]
   .map((name) => ({ name, value: process.env[name] }))
   .filter(({ value }) => value && value.length >= 8);
