@@ -1,8 +1,10 @@
 import "server-only";
+import type { SourceAdapter } from "@/lib/embergap/contracts";
 import { IntegrationError, isIntegrationError } from "@/lib/integrations/errors";
 import { createApiClient, type ApiClientOptions } from "@/lib/integrations/http";
 import { roundCoordinate } from "../../agents/runtime/geo";
-import { eonetBbox, eonetResponseSchema, isValidDay, matchEvents, toEventRecords } from "./normalize";
+import { eonetBbox, eonetResponseSchema, eonetWindow, isValidDay, matchEvents, toEventRecords } from "./normalize";
+import { eonetObservations } from "./observations";
 import { EONET_LIMITATIONS, eonetProvenance, eonetQuerySchema, type EonetContext, type EonetQuery } from "./types";
 
 /**
@@ -150,4 +152,50 @@ let shared: EonetClient | undefined;
 export function getEonet(): EonetClient {
   shared ??= createEonetClient();
   return shared;
+}
+
+/**
+ * The shared SourceAdapter port for EONET: canonical observations plus
+ * availability for one investigation. Never throws; a bad subject becomes an
+ * "unavailable" observation. Looks 60 days back, because EONET only matches
+ * records whose own date falls inside the window.
+ */
+export function createEonetSourceAdapter(client: EonetClient = getEonet(), options: { radiusKm?: number } = {}): SourceAdapter {
+  return async ({ investigationId, subject, checkedAt, signal }) => {
+    const radiusKm = options.radiusKm ?? 50;
+    const input = { investigationId, timeOfInterest: subject.observedAt };
+    try {
+      const window = eonetWindow(subject.observedAt);
+      const context = await client.getWildfireContext(
+        { latitude: subject.location.latitude, longitude: subject.location.longitude, radiusKm, ...window },
+        { signal },
+      );
+      return eonetObservations(context, input);
+    } catch {
+      const query = {
+        latitude: roundCoordinate(subject.location.latitude),
+        longitude: roundCoordinate(subject.location.longitude),
+        radiusKm,
+        limit: 50,
+        start: checkedAt.slice(0, 10),
+        end: checkedAt.slice(0, 10),
+      };
+      return eonetObservations(
+        {
+          source: "eonet",
+          query,
+          sourceState: "unavailable",
+          retrievedAt: checkedAt,
+          fromCache: false,
+          recordsInBox: 0,
+          matches: [],
+          possiblyTruncated: false,
+          limitations: [...EONET_LIMITATIONS],
+          provenance: eonetProvenance(false),
+          error: { kind: "bad_request", message: "NASA EONET could not answer for that place and time." },
+        },
+        input,
+      );
+    }
+  };
 }
