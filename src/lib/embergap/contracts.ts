@@ -10,9 +10,15 @@ import { z } from "zod";
  * these types. To change one, ask Claude Mac, and bump CONTRACT_VERSION for any
  * breaking change.
  *
+ * Zod note: schemas with cross-field rules (agentFindingSchema, agentEventSchema,
+ * mapFeatureSchema and others) can't be `.pick()`ed, `.omit()`ted or made
+ * `.partial()`. Derive from `z.object(schema.shape)` and validate the final
+ * value with the original.
+ *
  * Conventions
  * - Timestamps are UTC ISO 8601 strings ending in "Z", as produced by
- *   `new Date().toISOString()`. Offsets such as "+01:00" are rejected.
+ *   `new Date().toISOString()`. Parsing accepts an offset ("+00:00", as Postgres
+ *   returns) and normalises it to "Z". Report input (observedAt) must be "Z".
  * - IDs are UUID strings (`crypto.randomUUID()`), stable across retries. For
  *   deterministic synthetic fixtures use `syntheticId("<owner>/<scenario>/<thing>")`.
  * - Coordinates are WGS 84 decimal degrees, latitude first, then longitude.
@@ -43,8 +49,8 @@ export const CONTRACT_VERSION = "2026-11-07.1";
 export const idSchema = z.uuid();
 export type Id = z.infer<typeof idSchema>;
 
-/** UTC ISO 8601 with a trailing "Z". */
-export const timestampSchema = z.iso.datetime();
+/** UTC ISO 8601. Accepts an offset and always outputs the "Z" form. */
+export const timestampSchema = z.iso.datetime({ offset: true }).transform((value) => new Date(value).toISOString());
 export type Timestamp = z.infer<typeof timestampSchema>;
 
 /** Normalises a Date or a database timestamp ("...+00:00") to the contract's "Z" form. */
@@ -114,11 +120,14 @@ export const humanPublicLocationSchema = publicLocationSchema.refine(
   { message: "Use toPublicLocation() for human-derived locations." },
 );
 
-/** Rounds half away from zero, like Postgres `round(numeric, 2)`. */
+/**
+ * Matches the database exactly: reports are stored at 3 decimal places, then
+ * rounded half away from zero to 2 (Postgres `round(numeric, 2)`).
+ */
 function snapToGrid(value: number): number {
-  const steps = Math.round(Math.abs(value) / PUBLIC_LOCATION_GRID_DEGREES);
-  const snapped = Math.sign(value) * steps * PUBLIC_LOCATION_GRID_DEGREES;
-  return Number(snapped.toFixed(2)) + 0; // "+ 0" turns -0 into 0
+  const thousandths = Math.round(Number((Math.abs(value) * 1000).toFixed(6)));
+  const steps = Math.round(thousandths / 10);
+  return Number(((Math.sign(value) * steps) / 100).toFixed(2)) + 0; // "+ 0" turns -0 into 0
 }
 
 /** Coarsens a human-reported location for maps and shared views. */
@@ -151,8 +160,18 @@ export function parseBbox(value: string | null | undefined): Bbox | null {
   if (!value) return null;
   const parts = value.split(",");
   if (parts.length !== 4 || parts.some((part) => part.trim() === "")) return null;
-  const [minLongitude, minLatitude, maxLongitude, maxLatitude] = parts.map(Number);
-  const parsed = bboxSchema.safeParse({ minLongitude, minLatitude, maxLongitude, maxLatitude });
+  const values = parts.map(Number);
+  if (!values.every(Number.isFinite)) return null;
+  // Zoomed-out or antimeridian-panned maps send longitudes past ±180: clamp them.
+  const clampLon = (value: number) => Math.min(180, Math.max(-180, value));
+  const clampLat = (value: number) => Math.min(90, Math.max(-90, value));
+  const [minLongitude, minLatitude, maxLongitude, maxLatitude] = values;
+  const parsed = bboxSchema.safeParse({
+    minLongitude: clampLon(minLongitude),
+    minLatitude: clampLat(minLatitude),
+    maxLongitude: clampLon(maxLongitude),
+    maxLatitude: clampLat(maxLatitude),
+  });
   return parsed.success ? parsed.data : null;
 }
 
@@ -1001,7 +1020,16 @@ export const agentEventSchema = z
   details: z
     .record(z.string(), z.unknown())
     .nullable()
-    .refine((details) => details === null || JSON.stringify(details).length <= AGENT_EVENT_DETAILS_MAX_BYTES, {
+    .refine(
+      (details) => {
+        if (details === null) return true;
+        try {
+          return new TextEncoder().encode(JSON.stringify(details)).length <= AGENT_EVENT_DETAILS_MAX_BYTES;
+        } catch {
+          return false; // BigInt or a circular value: not JSON
+        }
+      },
+      {
       message: `details must be at most ${AGENT_EVENT_DETAILS_MAX_BYTES} bytes of JSON.`,
     }),
   isSynthetic: z.boolean(),
@@ -1191,7 +1219,9 @@ export const investigationSchema = investigationSummarySchema
   })
   .superRefine((investigation, ctx) => {
     const reviewed = investigation.status === "reviewed";
-    if (reviewed !== (investigation.reviewOutcome !== null && investigation.reviewedAt !== null)) {
+    const hasReview = investigation.reviewOutcome !== null && investigation.reviewedAt !== null;
+    const hasAnyReview = investigation.reviewOutcome !== null || investigation.reviewedAt !== null;
+    if (reviewed ? !hasReview : hasAnyReview) {
       ctx.addIssue({
         code: "custom",
         path: ["status"],
@@ -1285,9 +1315,9 @@ export const MAP_MAX_LIMIT = 200;
 export const mapQuerySchema = z.object({
   bbox: z
     .string()
-    .optional()
+    .nullish()
     .transform((value, ctx) => {
-      if (value === undefined || value === "") return null;
+      if (value === undefined || value === null || value === "") return null;
       const box = parseBbox(value);
       if (!box) {
         ctx.addIssue({ code: "custom", message: "bbox must be minLon,minLat,maxLon,maxLat." });
@@ -1295,7 +1325,10 @@ export const mapQuerySchema = z.object({
       }
       return box;
     }),
-  limit: z.coerce.number().int().min(1).max(MAP_MAX_LIMIT).default(MAP_DEFAULT_LIMIT),
+  limit: z.preprocess(
+    (value) => (value === null || value === "" ? undefined : value),
+    z.coerce.number().int().min(1).max(MAP_MAX_LIMIT).default(MAP_DEFAULT_LIMIT),
+  ),
 });
 export type MapQuery = z.infer<typeof mapQuerySchema>;
 
@@ -1324,6 +1357,9 @@ export const mapFeatureSchema = z.object({
 }).superRefine((feature, ctx) => {
   if (feature.kind === "investigation" && !humanPublicLocationSchema.safeParse(feature.location).success) {
     ctx.addIssue({ code: "custom", path: ["location"], message: "Investigation markers use toPublicLocation()." });
+  }
+  if (feature.reviewOutcome !== null && feature.status !== "reviewed") {
+    ctx.addIssue({ code: "custom", path: ["reviewOutcome"], message: "Only a reviewed investigation has a review outcome." });
   }
 });
 export type MapFeature = z.infer<typeof mapFeatureSchema>;
