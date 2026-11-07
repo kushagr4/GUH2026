@@ -127,6 +127,7 @@ describe("TIMELINE_SCENARIOS", () => {
       for (const step of result.steps) {
         expect(step.recommendation.status).not.toBe("reviewed");
         expect(step.recommendation.explanation[0]).toMatch(/human review only/);
+        expect(step.recommendation.explanation.join("\n")).not.toMatch(/%/);
       }
     });
   });
