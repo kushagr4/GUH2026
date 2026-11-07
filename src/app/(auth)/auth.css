@@ -1,0 +1,164 @@
+/*
+ * Styles for the sign-in and sign-up pages only. Everything is scoped under
+ * .auth-root so it cannot leak into the signed-in app, which keeps its own
+ * shadcn tokens from globals.css.
+ */
+
+.auth-root {
+  /* Warm, light palette with a single controlled ember accent. */
+  --auth-bg: #f8f6f1;
+  --auth-surface: #ffffff;
+  --auth-panel: #fcfbf8;
+  --auth-ink: #1b1815;
+  --auth-ink-2: #57524b;
+  --auth-ink-3: #8a837a;
+  --auth-line: #e6e0d6;
+  --auth-line-soft: #efeae2;
+  --auth-ember: #ea580c;
+  --auth-ember-ink: #b8430b;
+  --auth-ember-wash: #fff3ea;
+  --auth-amber: #f59e0b;
+
+  /* Re-point the shadcn tokens used by Input, Button and Alert inside this subtree. */
+  --background: var(--auth-bg);
+  --foreground: var(--auth-ink);
+  --card: var(--auth-surface);
+  --card-foreground: var(--auth-ink);
+  --primary: var(--auth-ink);
+  --primary-foreground: #ffffff;
+  --muted: #f1ede6;
+  --muted-foreground: var(--auth-ink-2);
+  --border: var(--auth-line);
+  --input: var(--auth-line);
+  --ring: var(--auth-ember);
+
+  background-color: var(--auth-bg);
+  color: var(--auth-ink);
+}
+
+.auth-serif {
+  font-family: var(--font-auth-serif), ui-serif, Georgia, serif;
+  font-weight: 400;
+}
+
+/* A faint drafting grid behind the showcase, faded out towards the edges. */
+.auth-grid {
+  background-image:
+    linear-gradient(to right, rgb(27 24 21 / 4.5%) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(27 24 21 / 4.5%) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: radial-gradient(ellipse 80% 60% at 30% 0%, #000 30%, transparent 75%);
+}
+
+/* A single soft ember glow at the top of the showcase. Kept deliberately subtle. */
+.auth-glow {
+  background: radial-gradient(
+    closest-side,
+    rgb(249 115 22 / 13%),
+    rgb(245 158 11 / 6%) 55%,
+    transparent
+  );
+}
+
+.auth-card-shadow {
+  box-shadow:
+    0 1px 0 rgb(27 24 21 / 3%),
+    0 1px 2px rgb(27 24 21 / 4%),
+    0 24px 48px -24px rgb(84 52 22 / 22%);
+}
+
+.auth-tile-shadow {
+  box-shadow:
+    0 1px 0 rgb(27 24 21 / 2%),
+    0 10px 24px -18px rgb(84 52 22 / 25%);
+}
+
+/* Entrance: a short, staggered rise. Delays are set inline per element. */
+@keyframes auth-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.auth-rise {
+  animation: auth-rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Carousel progress: the active tab's bar fills, and its animationend advances the slide. */
+@keyframes auth-progress {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.auth-progress {
+  transform: scaleX(0);
+  transform-origin: left center;
+}
+
+.auth-progress[data-active="true"] {
+  animation-name: auth-progress;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+
+.auth-slide {
+  transition:
+    opacity 0.45s ease,
+    transform 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes auth-ping {
+  0% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  80%,
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+
+.auth-ping {
+  animation: auth-ping 2.2s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+@keyframes auth-scan {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(260%);
+  }
+}
+
+.auth-scan {
+  animation: auth-scan 2.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-rise,
+  .auth-ping,
+  .auth-scan {
+    animation: none;
+  }
+
+  .auth-slide {
+    transition: none;
+  }
+
+  /* No autoplay: without the animation no animationend fires, so slides only change on request. */
+  .auth-progress[data-active="true"] {
+    animation: none;
+    transform: scaleX(1);
+  }
+}
