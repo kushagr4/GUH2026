@@ -11,6 +11,9 @@ import {
 } from "@/lib/embergap/contracts";
 import type { EnvSource } from "@/lib/integrations/env";
 import { getThermalAnomalies, type ThermalAnomalyDeps } from "@/lib/embergap/sources/firms";
+import { bboxContains } from "@/lib/embergap/sources/firms/bbox";
+import { getFirmsMode } from "@/lib/embergap/sources/firms/client";
+import { relocateLegacyDetections } from "./demo-detections";
 import type { FirmsDetection } from "@/lib/embergap/sources/firms/types";
 
 export type MapDeps = ThermalAnomalyDeps & {
@@ -61,10 +64,20 @@ function anomalyFeature(detection: FirmsDetection, checkedAt: string): MapFeatur
  * anomalies. Investigations come first, then the newest anomalies, up to limit.
  */
 export async function getMapData(query: MapQuery, deps: MapDeps): Promise<MapResponse> {
-  const [investigations, firms] = await Promise.all([
+  // Demo fixtures are placed next to the synthetic scenarios (in Italy) before the viewport filter.
+  const demo = getFirmsMode(deps.env ?? process.env) === "demo";
+  const [investigations, raw] = await Promise.all([
     deps.repository.listMapInvestigations(query),
-    getThermalAnomalies({ bbox: query.bbox, now: deps.now, env: deps.env, signal: deps.signal }, deps),
+    getThermalAnomalies({ bbox: demo ? null : query.bbox, now: deps.now, env: deps.env, signal: deps.signal }, deps),
   ]);
+  const firms = demo
+    ? {
+        ...raw,
+        detections: relocateLegacyDetections(raw.detections).filter((detection) =>
+          bboxContains(query.bbox, detection.latitude, detection.longitude),
+        ),
+      }
+    : raw;
   if (!investigations.ok) throw new MapReadError(investigations.error.message);
 
   const checkedAt = firms.availability.checkedAt;

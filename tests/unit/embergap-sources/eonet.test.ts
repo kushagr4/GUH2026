@@ -41,7 +41,7 @@ const hangUntilAborted = (init: RequestInit) =>
   new Promise<Response>((_, reject) => init.signal?.addEventListener("abort", () => reject(init.signal?.reason)));
 
 const NOW = new Date("2026-11-07T12:00:00Z");
-const QUERY = { latitude: 53.46, longitude: -1.85, radiusKm: 50, start: "2026-10-24", end: "2026-11-08" };
+const QUERY = { latitude: 37.75, longitude: 14.95, radiusKm: 50, start: "2026-10-24", end: "2026-11-08" };
 const sleep = vi.fn(async () => {});
 
 function client(fetch: typeof globalThis.fetch, extra: Parameters<typeof createEonetClient>[0] = {}) {
@@ -116,7 +116,7 @@ describe("EONET records", () => {
   it("reads [lon, lat] points the right way round", () => {
     const [ridge] = toEventRecords(SYNTHETIC_EONET_RESPONSE);
     expect(ridge).toMatchObject({ id: "EONET_990001", closedAt: null, prescribedBurnLikely: false });
-    expect(ridge.geometry[0]).toMatchObject({ shape: "point", latitude: 53.47, longitude: -1.84 });
+    expect(ridge.geometry[0]).toMatchObject({ shape: "point", latitude: 37.76, longitude: 14.96 });
     expect(ridge.geometry[0].magnitude).toEqual({ value: 780, unit: "acres" });
   });
 

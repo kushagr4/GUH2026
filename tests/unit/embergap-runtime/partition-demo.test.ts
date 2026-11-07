@@ -213,7 +213,7 @@ describe("source adapters through the shared port", () => {
   it("never throw, and a subject outside EONET's range becomes unavailable", async () => {
     const fetch = async () => new Response(JSON.stringify(SYNTHETIC_EONET_RESPONSE), { status: 200 });
     const adapter = createEonetSourceAdapter(createEonetClient({ fetch: fetch as unknown as typeof globalThis.fetch, now: () => new Date("2026-11-07T12:00:00Z") }));
-    const subject = { location: { latitude: 53.46, longitude: -1.85, precisionMeters: 1000 }, observedAt: "2026-11-07T11:45:00.000Z", syntheticScenarioId: null };
+    const subject = { location: { latitude: 37.75, longitude: 14.95, precisionMeters: 1000 }, observedAt: "2026-11-07T11:45:00.000Z", syntheticScenarioId: null };
     const ok = await adapter({ investigationId: A, subject, checkedAt: "2026-11-07T12:00:00.000Z" });
     expect(ok.availability.state).toBe("available");
     expect(ok.observations[0]).toMatchObject({ source: "eonet", provenance: { isSynthetic: false } });

@@ -241,7 +241,7 @@ describe("Open-Meteo as canonical observations", () => {
         hours: 31,
         profile,
         currentIso: "2026-11-07T12:00:00Z",
-        gridCell: { latitude: 53.46, longitude: -1.85, elevation: 400 },
+        gridCell: { latitude: 37.75, longitude: 14.95, elevation: 400 },
       }),
       { retrievedAt: NOW.toISOString() },
     );

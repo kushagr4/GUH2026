@@ -5,7 +5,9 @@ import { SYNTHETIC_EONET_EMPTY_RESPONSE, SYNTHETIC_EONET_RESPONSE, syntheticEone
 import { eonetWindow } from "@/lib/embergap/sources/eonet/normalize";
 import { eonetProvenance, type EonetContext } from "@/lib/embergap/sources/eonet/types";
 import { getThermalAnomalies, type FirmsResult } from "@/lib/embergap/sources/firms";
+import { bboxContains } from "@/lib/embergap/sources/firms/bbox";
 import { getFirmsMode } from "@/lib/embergap/sources/firms/client";
+import { relocateLegacyDetections } from "@/lib/embergap/read/demo-detections";
 import { getOpenMeteo } from "@/lib/embergap/sources/weather/open-meteo";
 import { syntheticOpenMeteoResponse, syntheticWeatherContext, unavailableWeatherContext } from "@/lib/embergap/sources/weather/fixtures";
 import { openMeteoProvenance, type WeatherContext, type WeatherQuery } from "@/lib/embergap/sources/weather/types";
@@ -174,7 +176,12 @@ export const liveSourceGatherer: SourceGatherer = async (subject, { signal, now 
  */
 export const syntheticSourceGatherer: SourceGatherer = async (subject) => {
   const scenario = SYNTHETIC_SCENARIOS.find((entry) => entry.investigationId === subject.investigationId);
-  const firms = await getThermalAnomalies({ bbox: bboxAround(subject.location, FIRMS_RADIUS_KM), dayRange: 2, env: {} });
+  const all = await getThermalAnomalies({ bbox: null, dayRange: 2, env: {} });
+  const box = bboxAround(subject.location, FIRMS_RADIUS_KM);
+  const firms = {
+    ...all,
+    detections: relocateLegacyDetections(all.detections).filter((detection) => bboxContains(box, detection.latitude, detection.longitude)),
+  };
   const query = weatherQueryFor(subject);
   const weather =
     scenario?.id === "weather-timeout"

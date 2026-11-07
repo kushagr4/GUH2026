@@ -44,9 +44,10 @@ describe("map camera", () => {
     }
   });
 
-  it("the default view is Campania wine country, with synthetic detections in it", () => {
-    expect(DEFAULT_REGION.id).toBe("campania-vineyards");
-    const camera = fitCamera(DEFAULT_REGION.bbox, SIZE);
+  it("the default view is Italy, and the Campania preset shows its synthetic detections", () => {
+    expect(DEFAULT_REGION.id).toBe("italy");
+    const campania = DEMO_REGIONS.find((region) => region.id === "campania-vineyards")!;
+    const camera = fitCamera(campania.bbox, SIZE);
     const inView = demoFirmsDetections().filter((detection) => {
       const { x, y } = toScreen(camera, SIZE, detection.latitude, detection.longitude);
       return x > 0 && x < SIZE.width && y > 0 && y < SIZE.height;

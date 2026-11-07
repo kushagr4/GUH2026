@@ -192,7 +192,7 @@ export function demoActions(): ScenarioAction[] {
       hours: 31,
       profile: "fire-weather",
       currentIso: SYNTHETIC_NOW,
-      gridCell: { latitude: 53.463, longitude: -1.857, elevation: 410 },
+      gridCell: { latitude: 37.751, longitude: 14.946, elevation: 410 },
     }),
     { retrievedAt: SYNTHETIC_NOW },
   );
@@ -241,15 +241,15 @@ export function demoActions(): ScenarioAction[] {
     { at: DEMO_PHASES.connectedAt, kind: "phase", name: "connected" },
     enqueue(0, "weather", task(A, "weather/context", "weather.context", { context: weatherA })),
     enqueue(0, "weather", task(A, "weather/eonet", "eonet.context", { context: eonetA, timeOfInterest: a.report.observedAt })),
-    enqueue(0, "satellite", task(A, "satellite/pass-1", "satellite.pass", pass("a-pass-1", "NOAA-20", "2026-11-07T11:30:00.000Z", "2026-11-07T12:00:00.000Z", [detection(53.466, -1.846, "2026-11-07T11:52:00.000Z", 0.6, 14.2)]))),
+    enqueue(0, "satellite", task(A, "satellite/pass-1", "satellite.pass", pass("a-pass-1", "NOAA-20", "2026-11-07T11:30:00.000Z", "2026-11-07T12:00:00.000Z", [detection(37.754, 14.957, "2026-11-07T11:52:00.000Z", 0.6, 14.2)]))),
     enqueue(0, "vision", task(A, "vision/assess", "vision.assess", { mediaId: syntheticId("runtime-demo/partition-recovery/media"), reportObservedAt: a.report.observedAt, labels: ["smoke plume", "hillside"], smokeLike: true })),
     enqueue(0, "weather", task(A, "weather/detection-1", "weather.detection-context", { context: weatherA }, ["satellite/pass-1"])),
 
     { at: DEMO_PHASES.partitionedAt, kind: "phase", name: "partitioned" },
     { at: DEMO_PHASES.partitionedAt, kind: "partition", groups: DEMO_PARTITION },
     // Isolated side: a second satellite pass over A, and the first over B.
-    enqueue(later, "satellite", task(A, "satellite/pass-2", "satellite.pass", pass("a-pass-2", "Suomi-NPP", "2026-11-07T11:55:00.000Z", "2026-11-07T12:00:00.000Z", [detection(53.468, -1.861, "2026-11-07T11:58:00.000Z", 0.9, 22.8), detection(53.455, -1.84, "2026-11-07T11:58:00.000Z", 1.4, 9.6)]))),
-    enqueue(later, "satellite", task(B, "satellite/pass-1", "satellite.pass", pass("b-pass-1", "NOAA-20", "2026-11-07T10:45:00.000Z", "2026-11-07T11:15:00.000Z", [detection(53.61, -1.92, "2026-11-07T11:05:00.000Z", 1.1, 11.3)]))),
+    enqueue(later, "satellite", task(A, "satellite/pass-2", "satellite.pass", pass("a-pass-2", "Suomi-NPP", "2026-11-07T11:55:00.000Z", "2026-11-07T12:00:00.000Z", [detection(37.756, 14.942, "2026-11-07T11:58:00.000Z", 0.9, 22.8), detection(37.743, 14.963, "2026-11-07T11:58:00.000Z", 1.4, 9.6)]))),
+    enqueue(later, "satellite", task(B, "satellite/pass-1", "satellite.pass", pass("b-pass-1", "NOAA-20", "2026-11-07T10:45:00.000Z", "2026-11-07T11:15:00.000Z", [detection(40.658, 17.981, "2026-11-07T11:05:00.000Z", 1.1, 11.3)]))),
     // Main side: investigation B arrives, and its weather source times out.
     enqueue(later, "weather", task(B, "weather/context", "weather.context", { context: weatherB })),
     enqueue(later, "weather", task(B, "weather/eonet", "eonet.context", { context: eonetB, timeOfInterest: b.report.observedAt })),
