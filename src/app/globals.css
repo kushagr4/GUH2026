@@ -128,3 +128,53 @@
     @apply font-sans;
   }
 }
+
+.ember-logo-flame {
+  display: inline-flex;
+  flex: none;
+  filter: drop-shadow(0 0 5px rgb(255 129 0 / 50%));
+}
+
+.ember-logo-outer,
+.ember-logo-inner,
+.ember-logo-core {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+}
+
+.ember-logo-outer {
+  animation: flame-sway 1.15s ease-in-out infinite alternate;
+}
+
+.ember-logo-inner {
+  animation: flame-glow 0.8s ease-in-out infinite alternate;
+}
+
+.ember-logo-core {
+  animation: flame-core 0.65s ease-in-out infinite alternate;
+}
+
+@keyframes flame-sway {
+  0% { transform: rotate(-8deg) scale(0.96, 0.92); }
+  45% { transform: rotate(4deg) scale(1.03, 1.06); }
+  100% { transform: rotate(8deg) scale(0.95, 0.98); }
+}
+
+@keyframes flame-glow {
+  0% { transform: rotate(9deg) scale(0.9, 0.85); }
+  100% { transform: rotate(-9deg) scale(1.08, 1.14); }
+}
+
+@keyframes flame-core {
+  0% { transform: translateX(-1px) scaleY(0.8); opacity: 0.8; }
+  100% { transform: translateX(1px) scaleY(1.2); opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ember-logo-outer,
+  .ember-logo-inner,
+  .ember-logo-core {
+    animation: none;
+  }
+}
+
