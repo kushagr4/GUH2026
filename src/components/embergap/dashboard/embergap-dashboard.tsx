@@ -27,6 +27,7 @@ import {
   priorityLabel,
   priorityTone,
 } from "./labels";
+import { SOURCE_FEED, SourceChip, satelliteLabel } from "./data-sources";
 import { ToneBadge } from "./tone-badge";
 
 const MAP_LIMIT = 200;
@@ -48,7 +49,26 @@ export function featureLabel(feature: MapFeature): string {
     if (scenario) return `${scenario.title} · ${SCENARIO_PLACE[scenario.id] ?? "Italy"}`;
     return feature.investigation ? `Investigation, ${formatUtc(feature.investigation.openedAt)}` : "Investigation";
   }
-  return `${feature.firms?.instrument ?? feature.provenance.product ?? "FIRMS"} thermal anomaly`;
+  return `Thermal anomaly · ${satelliteLabel(feature.provenance.product)}`;
+}
+
+function scenarioOf(feature: MapFeature) {
+  return SYNTHETIC_SCENARIOS.find((item) => item.id === feature.investigation?.syntheticScenarioId) ?? null;
+}
+
+/** "High confidence · 6.4 MW", never a percentage. */
+function detectionSummary(feature: MapFeature): string {
+  const confidence = feature.firms?.confidence ?? null;
+  const parts = [
+    confidence === null
+      ? null
+      : typeof confidence === "number"
+        ? `Confidence ${confidence}/100`
+        : `${confidence[0]!.toUpperCase()}${confidence.slice(1)} confidence`,
+    feature.firms?.frpMegawatts == null ? null : `${feature.firms.frpMegawatts} MW`,
+    feature.firms?.dayNight ? (feature.firms.dayNight === "day" ? "Day pass" : "Night pass") : null,
+  ];
+  return parts.filter(Boolean).join(" · ");
 }
 
 function age(feature: MapFeature, now: string): string {
@@ -191,6 +211,7 @@ export function EmberGapDashboard({
           </div>
           <Section
             title="Investigations"
+            subtitle="Eyewitness reports, each assessed by five independent agents"
             tone="rose"
             count={investigations.length}
             open={investigationsOpen}
@@ -208,6 +229,13 @@ export function EmberGapDashboard({
           </Section>
           <Section
             title="Thermal anomalies"
+            subtitle={
+              anomalies.length === 0
+                ? "NASA FIRMS satellite detections in view"
+                : satelliteLive
+                ? "Live from NASA FIRMS satellites (VIIRS, MODIS)"
+                : "Simulated demo detections. Add a NASA FIRMS key on the server for live satellite data."
+            }
             tone="amber"
             count={anomalies.length}
             open={anomaliesOpen}
@@ -254,6 +282,7 @@ const SECTION_TONE = {
 
 function Section({
   title,
+  subtitle,
   count,
   tone,
   open,
@@ -261,6 +290,7 @@ function Section({
   children,
 }: {
   title: string;
+  subtitle?: string;
   count: number;
   tone: keyof typeof SECTION_TONE;
   open: boolean;
@@ -276,11 +306,14 @@ function Section({
         }}
         className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-4 text-sm font-semibold hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-offset-[-3px] [&::-webkit-details-marker]:hidden"
       >
-        <span className="flex items-center gap-2">
-          {title}
-          <span className={cn("rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums", SECTION_TONE[tone].pill)}>
-            {count}
+        <span className="flex min-w-0 flex-col gap-0.5">
+          <span className="flex items-center gap-2">
+            {title}
+            <span className={cn("rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums", SECTION_TONE[tone].pill)}>
+              {count}
+            </span>
           </span>
+          {subtitle ? <span className="text-xs font-normal text-muted-foreground">{subtitle}</span> : null}
         </span>
         <Chevron open={open} />
       </summary>
@@ -319,12 +352,12 @@ function Item({
             event.preventDefault();
             onToggle();
           }}
-          className="flex min-h-12 cursor-pointer list-none items-center gap-2 px-3 py-2.5 text-sm focus-visible:outline-2 focus-visible:outline-offset-[-3px] [&::-webkit-details-marker]:hidden"
+          className="flex min-h-12 cursor-pointer list-none items-start gap-2.5 px-3 py-2.5 text-sm focus-visible:outline-2 focus-visible:outline-offset-[-3px] [&::-webkit-details-marker]:hidden"
         >
           <span
             aria-hidden
             className={cn(
-              "h-4 w-1 shrink-0 rounded-full",
+              "w-1 self-stretch shrink-0 rounded-full",
               feature.kind === "investigation"
                 ? feature.reviewPriority === "high"
                   ? "bg-red-600"
@@ -336,8 +369,30 @@ function Item({
                   : "bg-stone-400",
             )}
           />
-          <span className="min-w-0 flex-1 leading-5">{featureLabel(feature)}</span>
-          <span className="shrink-0 text-xs text-muted-foreground">{age(feature, now)}</span>
+          <span className="flex min-w-0 flex-1 flex-col gap-1">
+            <span className="flex items-baseline gap-2">
+              <span className="line-clamp-2 min-w-0 flex-1 font-medium leading-snug">
+                {feature.kind === "investigation"
+                  ? (scenarioOf(feature)?.title ?? (feature.investigation && feature.investigation.reportCount > 1 ? `${feature.investigation.reportCount} eyewitness reports` : "Eyewitness report"))
+                  : "Thermal anomaly"}
+              </span>
+              <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{age(feature, now)}</span>
+            </span>
+            <span className="flex min-w-0 flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+              {feature.kind === "investigation" ? (
+                <>
+                  <SourceChip icon={SOURCE_FEED.human.icon} label={SOURCE_FEED.human.label} synthetic={feature.provenance.isSynthetic} />
+                  {feature.status ? <span>{STATUS_LABEL[feature.status]}</span> : null}
+                  {scenarioOf(feature) ? <span>· {SCENARIO_PLACE[scenarioOf(feature)!.id] ?? "Italy"}</span> : null}
+                </>
+              ) : (
+                <>
+                  <SourceChip icon={SOURCE_FEED.firms.icon} label={satelliteLabel(feature.provenance.product)} synthetic={feature.provenance.isSynthetic} />
+                  <span className="truncate">{detectionSummary(feature)}</span>
+                </>
+              )}
+            </span>
+          </span>
           <Chevron open={open} />
         </summary>
         <div className="flex flex-col gap-3 px-3 pt-1 pb-4 text-sm leading-5">
@@ -356,8 +411,8 @@ function Item({
                 <dd>±{precisionKm} km</dd>
                 <dt className="text-muted-foreground">Reports</dt>
                 <dd>{feature.investigation?.reportCount ?? "—"}</dd>
-                <dt className="text-muted-foreground">Sources</dt>
-                <dd>{feature.sources.join(", ") || "—"}</dd>
+                <dt className="text-muted-foreground">Evidence</dt>
+                <dd>{feature.sources.map((source) => SOURCE_FEED[source].label).join(", ") || "—"}</dd>
               </dl>
               {feature.investigationId ? (
                 <Link
@@ -381,7 +436,11 @@ function Item({
               <dt className="text-muted-foreground">Pixel</dt>
               <dd>±{precisionKm} km</dd>
               <dt className="text-muted-foreground">Source</dt>
-              <dd>{feature.provenance.isSynthetic ? "Synthetic" : `NASA FIRMS ${feature.provenance.product ?? ""}`}</dd>
+              <dd>
+                {feature.provenance.isSynthetic
+                  ? "Simulated demo detection (not real NASA data)"
+                  : `NASA FIRMS, ${satelliteLabel(feature.provenance.product)}`}
+              </dd>
             </dl>
           )}
         </div>
