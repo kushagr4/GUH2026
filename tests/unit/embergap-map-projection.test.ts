@@ -80,12 +80,14 @@ describe("map camera", () => {
 
   it("covers the whole view with tiles at fractional zoom", () => {
     const camera = { ...fitCamera(DEFAULT_REGION.bbox, SIZE), zoom: 9.4 };
-    const tiles = tilesFor(camera, SIZE, "https://tile.example/{z}/{x}/{y}.png");
+    const tiles = tilesFor(camera, SIZE, "https://{s}.tile.example/{z}/{x}/{y}.png");
     expect(Math.min(...tiles.map((t) => t.x))).toBeLessThanOrEqual(0);
     expect(Math.max(...tiles.map((t) => t.x + t.size))).toBeGreaterThanOrEqual(SIZE.width);
     expect(Math.min(...tiles.map((t) => t.y))).toBeLessThanOrEqual(0);
     expect(Math.max(...tiles.map((t) => t.y + t.size))).toBeGreaterThanOrEqual(SIZE.height);
-    expect(tiles[0]?.url).toMatch(/^https:\/\/tile\.example\/9\/\d+\/\d+\.png$/);
+    // Rounds the tile zoom up, so tiles are only ever scaled down (sharp).
+    expect(tiles[0]?.url).toMatch(/^https:\/\/[abcd]\.tile\.example\/10\/\d+\/\d+\.png$/);
+    expect(Math.max(...tiles.map((t) => t.size))).toBeLessThanOrEqual(257);
   });
 });
 
