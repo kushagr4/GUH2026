@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { runPartitionDemo, type PartitionDemoResult } from "@/lib/embergap/agents/runtime";
 import { NetworkView } from "@/components/embergap/network/network-view";
-import { buildNetworkViewModel, stageSnapshotTimes, type NetworkViewModel, type StageId } from "@/components/embergap/network/view-model";
+import { REPORT_LABELS, buildNetworkViewModel, stageSnapshotTimes, type NetworkViewModel, type StageId } from "@/components/embergap/network/view-model";
 
 afterEach(cleanup);
 
@@ -58,9 +58,9 @@ describe("buildNetworkViewModel", () => {
   it("has fusion recommendations, which change for report B after reconciliation", () => {
     const fusionAt = (id: StageId) => model.stages.find((item) => item.id === id)!.nodes.find((node) => node.id === "fusion")!.fusion!;
     const final = fusionAt("reconciled");
-    expect(final.map((rec) => rec.report)).toEqual(["Report A", "Report B"]);
-    const isolatedB = fusionAt("working_in_isolation").find((rec) => rec.report === "Report B")!;
-    const finalB = final.find((rec) => rec.report === "Report B")!;
+    expect(final.map((rec) => rec.report)).toEqual([...REPORT_LABELS]);
+    const isolatedB = fusionAt("working_in_isolation").find((rec) => rec.report === REPORT_LABELS[1])!;
+    const finalB = final.find((rec) => rec.report === REPORT_LABELS[1])!;
     expect(finalB.independentSources).toBeGreaterThan(isolatedB.independentSources);
   });
 

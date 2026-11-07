@@ -25,8 +25,9 @@ export default async function EmberGapNetworkPage() {
         <p className="text-sm font-medium uppercase tracking-wide text-orange-700 dark:text-orange-300">Simulation · synthetic data</p>
         <h1 className="text-3xl font-semibold tracking-tight">Agent network</h1>
         <p className="text-lg">
-          Four independent agents investigate a possible vineyard fire report in Italy (Report A); a second report (Report B) arrives while the
-          network is split. Watch what happens when the network splits.
+          Four independent agents investigate a possible fire reported on the vineyard slopes of Mount Etna, Sicily (Report A). A second
+          report, from the Salento vineyards in Puglia (Report B), arrives while the network is split. Watch what each agent knows, and how
+          they catch up when the links come back.
         </p>
         <p className="text-sm text-muted-foreground">
           In-process simulation of a partitionable agent network; not a deployed multi-machine system. Outputs are review recommendations for a

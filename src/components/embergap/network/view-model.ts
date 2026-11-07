@@ -95,9 +95,16 @@ export function stageSnapshotTimes(full: PartitionDemoResult): Record<StageId, n
 
 const EPOCH_MS = Date.parse(SYNTHETIC_NOW);
 
+/**
+ * Display names for the demo's two synthetic reports. Their coordinates (contracts
+ * SYNTHETIC_SCENARIOS) sit in real Italian wine country: partition-recovery on
+ * Etna's slopes in Sicily, weather-timeout near Brindisi in Puglia's Salento.
+ */
+export const REPORT_LABELS = ["Report A · Etna vineyards, Sicily", "Report B · Salento vineyards, Puglia"] as const;
+
 function reportLabel(full: PartitionDemoResult, investigationId: string) {
   const index = full.investigationIds.indexOf(investigationId);
-  return index === 0 ? "Report A" : index === 1 ? "Report B" : "Other report";
+  return REPORT_LABELS[index] ?? "Other report";
 }
 
 function taskName(taskId: string) {
