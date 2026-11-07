@@ -13,7 +13,7 @@ import {
   type MapResponse,
 } from "@/lib/embergap/contracts";
 import { isWithinFirmsSpan } from "@/lib/embergap/sources/firms/bbox";
-import type { MapRegion } from "@/lib/embergap/read/regions";
+import { SCENARIO_PLACE, type MapRegion } from "@/lib/embergap/read/regions";
 import { HeatMap } from "@/components/embergap/map/heat-map";
 import {
   SOURCE_STATE_LABEL,
@@ -39,7 +39,7 @@ function referenceTime(data: MapResponse): string {
 export function featureLabel(feature: MapFeature): string {
   if (feature.kind === "investigation") {
     const scenario = SYNTHETIC_SCENARIOS.find((item) => item.id === feature.investigation?.syntheticScenarioId);
-    if (scenario) return scenario.title;
+    if (scenario) return `${scenario.title} · ${SCENARIO_PLACE[scenario.id] ?? "Italy"}`;
     return feature.investigation ? `Investigation, ${formatUtc(feature.investigation.openedAt)}` : "Investigation";
   }
   return `${feature.firms?.instrument ?? feature.provenance.product ?? "FIRMS"} thermal anomaly`;
@@ -122,7 +122,8 @@ export function EmberGapDashboard({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground" aria-live="polite">
-        {data.mode !== "live" ? <ToneBadge tone="neutral">Synthetic data</ToneBadge> : null}
+        {data.mode === "synthetic" ? <ToneBadge tone="neutral">Demo · simulated evidence</ToneBadge> : null}
+        {data.mode === "mixed" ? <ToneBadge tone="neutral">Mixed: live and simulated evidence</ToneBadge> : null}
         {firms ? (
           <ToneBadge tone={SOURCE_STATE_TONE[firms.state]}>
             FIRMS {satelliteLive ? "live" : "demo"} · {SOURCE_STATE_LABEL[firms.state]}

@@ -29,14 +29,23 @@ describe("createSupabaseReadRepository", () => {
   it("puts the database's investigations first and keeps the synthetic ones once", async () => {
     const fixtures = await fixtureReadRepository.listMapInvestigations({ bbox: null, limit: 50 });
     if (!fixtures.ok) throw new Error("fixtures");
-    const live = { ...fixtures.data.features[0], id: "10000000-0000-4000-8000-000000000001", provenance: { ...fixtures.data.features[0].provenance, isSynthetic: false } };
-    repo.listMapInvestigations.mockResolvedValue({ ok: true, data: { features: [live, fixtures.data.features[1]], truncated: false } });
+    const live = {
+      ...fixtures.data.features[0],
+      id: "10000000-0000-4000-8000-000000000001",
+      investigationId: "10000000-0000-4000-8000-000000000001",
+      provenance: { ...fixtures.data.features[0].provenance, isSynthetic: false },
+    };
+    // A legacy (UK) seed row for a synthetic id: replaced by the Italy fixture.
+    const legacySeed = { ...fixtures.data.features[1], location: { ...fixtures.data.features[1].location, latitude: 53.5, longitude: -1.9 } };
+    repo.listMapInvestigations.mockResolvedValue({ ok: true, data: { features: [live, legacySeed], truncated: false } });
 
     const result = await createSupabaseReadRepository(client, viewer).listMapInvestigations({ bbox: null, limit: 50 });
     if (!result.ok) throw new Error("expected ok");
     expect(result.data.features[0].id).toBe(live.id);
     const ids = result.data.features.map((feature) => feature.id);
     expect(new Set(ids).size).toBe(ids.length);
+    // No UK coordinates in the Italian demonstration.
+    expect(result.data.features.every((feature) => feature.location.latitude < 48)).toBe(true);
     expect(result.data.features.every((feature) => mapFeatureSchema.safeParse(feature).success)).toBe(true);
   });
 
@@ -46,14 +55,15 @@ describe("createSupabaseReadRepository", () => {
     expect(result.ok && result.data.features.every((feature) => feature.provenance.isSynthetic)).toBe(true);
   });
 
-  it("returns the database's detail for a submitted report, and fixtures only for synthetic ids", async () => {
+  it("returns the database's detail for a submitted report, and the Italy fixtures for synthetic ids", async () => {
     const detail = { investigation: { id: "x" } } as unknown as InvestigationDetailResponse;
     repo.getInvestigationDetail.mockResolvedValueOnce({ ok: true, data: detail });
     await expect(createSupabaseReadRepository(client, viewer).getInvestigationDetail("10000000-0000-4000-8000-000000000001")).resolves.toEqual({ ok: true, data: detail });
 
     repo.getInvestigationDetail.mockResolvedValue({ ok: false, error: { kind: "not_found", message: "x" } });
     const synthetic = await createSupabaseReadRepository(client, viewer).getInvestigationDetail(SYNTHETIC_SCENARIOS[0].investigationId);
-    expect(synthetic.ok).toBe(true);
+    expect(synthetic.ok && synthetic.data.investigation.location.latitude).toBeCloseTo(40.12, 1);
+    expect(repo.getInvestigationDetail).toHaveBeenCalledTimes(1);
     const missing = await createSupabaseReadRepository(client, viewer).getInvestigationDetail("10000000-0000-4000-8000-000000000009");
     expect(missing).toMatchObject({ ok: false, error: { kind: "not_found" } });
   });
