@@ -2,7 +2,7 @@
 
 # GUH2026 Starter
 
-A reusable Next.js and Supabase foundation for GreatUniHack 2026. It contains generic infrastructure and no competition idea until the event begins. Optimise for development speed, reliability and demo readiness over advanced infrastructure.
+A reusable Next.js and Supabase foundation for GreatUniHack 2026. It retains the generic hackathon infrastructure, and the active product is EmberGap (see the implementation brief below). Optimise for development speed, reliability and demo readiness over advanced infrastructure.
 
 ## Non-negotiable constraints
 
@@ -134,3 +134,44 @@ Every change reaches `main` through a focused PR with green **PR Checks** and on
 - Keep the `/dev` pages until the end. They are the fastest way to tell whether a problem is in the infrastructure or in your feature.
 - Before any commit of secrets-adjacent work, run `npm run secrets:scan`.
 - Report honestly: don't say a check passed unless it ran and passed. Hosted tests skip without credentials, and a skip is not a pass.
+
+
+---
+
+## EmberGap implementation brief (active project, November 2026)
+
+**The starter-era sentence above saying there is "no competition idea" is historical. The chosen application is EmberGap.** Treat the shared starter architecture, security guidance, scripts and review gates above as binding. For the actual product design, data flow, acceptance criteria and planned code boundaries, read **`docs/architecture.md#embergap-product-architecture-greatunihack-2026`** before implementing any EmberGap feature. Do not infer that the planned modules or schema already exist.
+
+### Definition of success
+
+A reporter submits a safely geolocated, optional-photo **possible** wildfire observation; isolated agents separately analyse vision, thermal anomalies (NASA FIRMS), weather (Open-Meteo), EONET context and potentially independent witness reports; a fusion agent offers a transparent, auditable **review recommendation**. The system visibly continues processing locally queued tasks during a communication partition and reconciles without data loss or duplicate application afterward. All demo incidents are synthetic unless specifically marked as sourced real data. **Never describe EmberGap as an operational emergency-alert, dispatch or confirmed wildfire detection system.**
+
+### Coordination: five contributors, no shared feature branches
+
+| Contributor | Branch | Primary responsibility |
+| --- | --- | --- |
+| Claude Code on **Mac** (integration lead) | `feat/embergap-core` | Shared contracts, migrations, report persistence, private uploads, API surfaces, final wiring |
+| Claude Code on **PC** | `feat/embergap-data` | FIRMS, Open-Meteo, EONET adapters; normalization, caching, fixtures; Windows verification |
+| Human developer A | `feat/embergap-agents` | Independent workers, queues, network simulation, event delivery and reconciliation |
+| Human developer B | `feat/embergap-validation` | Claude Vision, independent witness correlation, evidence fusion and uncertainty explanations |
+| Human developer C | `feat/embergap-ui` | Mobile/desktop dashboard, report flow, map, agent status and browser QA |
+
+These branch names denote **suggested ownership**, not guaranteed existing branches. Create branches from updated `main`; never have both Claude sessions push to one branch. Mac owns contracts and DB migration/types; everybody else depends on those contracts and uses fixtures meanwhile. If you discover someone owns the file you need, request coordination through a PR instead of editing it independently. See the canonical boundaries in `docs/architecture.md`.
+
+**Integrate in order:** shared contracts/migrations, then data and worker runtime, then validation, then UI and end-to-end wiring. Start draft PRs early; run `/self-review`, preflight and relevant local tests before requesting one independent human approval. Never approve or merge a PR yourself, bypass the git guard, or push directly to `main`.
+
+### Feature workflow and skills
+
+- **Before new code:** read `docs/architecture.md`, `AGENTS.md`, `docs/development-workflow.md`, and load `/.claude/skills/feature-dev/SKILL.md` (path relative to repo root, without the leading slash in CLI commands).
+- **Bug fixes:** `.claude/skills/bugfix/SKILL.md` and `docs/debugging-workflow.md`: reproduce, failing regression, root cause, fix, retest.
+- **Before PR ready:** `.claude/skills/self-review/SKILL.md` and `docs/ci-and-reviews.md`. Fix Critical and Important findings. A self-review is not a human approval.
+- **Agent reasoning:** keep independent agents separate; do not replace them with a central function that makes all decisions. Use structured source-attributed findings and deterministic, reversible fusion rules. Include tests of communications loss, retries, duplicate/out-of-order messages and recovery.
+- **Data security:** reports can contain sensitive locations and photos. Reporter-owned RLS, private media, server-side API keys, approximate public locations, input validation, abuse protections and audit trails are required. A reporter cannot assert trusted reviewer status or write another agent's findings.
+- **Scientific responsibility:** absence of satellite data is **unknown**, not evidence of absence. Weather alone cannot confirm fire; Claude vision cannot authenticate photographs. Never assert model confidence as calibrated probability unless measured and calibrated. No unreviewed user report becomes a verified incident.
+- **Demo discipline:** deterministic synthetic fixtures and mocked AI are required for an end-to-end offline demonstration. Live NASA/weather and Anthropic are optional enrichment. No live API calls in unit/CI tests.
+- **Development environment:** Node 22.12+ and Docker Desktop; `npm run local:dev`, `npm run local:status`, `npm run local:test`, `npm run preflight`. On Windows use a supported WSL2/Docker Desktop setup; do not assume POSIX-only shell commands in cross-platform scripts.
+- **External APIs:** reuse `src/lib/integrations/createApiClient` patterns and `src/lib/ai`; do not bypass existing rate limits, security checks or the hosted migration owner. Verify current external API contracts rather than guessing.
+
+### Minimum per-workstream handoff
+
+Every PR description must list: owned files; contract version and dependencies; user-visible behaviour; synthetic test fixture; source provenance and error handling; security/RLS impact; offline/disconnected behaviour; exact tests run vs skipped; and a demo step. When adding agent messages, show deduplication and convergence tests. Never claim an improvement metric without measured baseline results.
