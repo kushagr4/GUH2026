@@ -100,7 +100,6 @@ export function InvestigationView({ detail }: { detail: InvestigationDetailRespo
         actions={
           <div className="flex flex-wrap gap-2">
             <ToneBadge tone={STATUS_TONE[investigation.status]}>{STATUS_LABEL[investigation.status]}</ToneBadge>
-            {investigation.isSynthetic ? <ToneBadge tone="neutral">Demo · simulated evidence</ToneBadge> : null}
           </div>
         }
       />

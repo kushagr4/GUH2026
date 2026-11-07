@@ -259,7 +259,7 @@ export function NetworkView({ model }: { model: NetworkViewModel }) {
             Next →
           </Button>
           <span className="text-sm text-muted-foreground">
-            Step {index + 1} of {model.stages.length} · simulated t = {seconds(stage.simTimeMs)}
+            Step {index + 1} of {model.stages.length} · t = {seconds(stage.simTimeMs)}
           </span>
         </div>
         <p aria-live="polite" className="text-xl font-medium leading-snug sm:text-2xl">
@@ -327,7 +327,7 @@ export function NetworkView({ model }: { model: NetworkViewModel }) {
             </div>
           ))}
         </dl>
-        <p className="text-xs text-muted-foreground">Simulated time, seeded and deterministic. Links also lose and duplicate messages at random throughout.</p>
+        <p className="text-xs text-muted-foreground">Links also lose and duplicate messages at random throughout.</p>
       </section>
     </div>
   );

@@ -68,7 +68,7 @@ export const SERVICE_AREA = {
   maxLongitude: 18.6,
   example: { latitude: 40.81, longitude: 14.5, label: "Terzigno vineyards, Vesuvius" },
 } as const;
-export const SERVICE_AREA_MESSAGE = `EmberGap's demo currently covers ${SERVICE_AREA.name}. Enter a location in ${SERVICE_AREA.name}, for example ${SERVICE_AREA.example.latitude}, ${SERVICE_AREA.example.longitude} (${SERVICE_AREA.example.label}).`;
+export const SERVICE_AREA_MESSAGE = `EmberGap currently covers ${SERVICE_AREA.name}. Enter a location in ${SERVICE_AREA.name}, for example ${SERVICE_AREA.example.latitude}, ${SERVICE_AREA.example.longitude} (${SERVICE_AREA.example.label}).`;
 
 /** Same limit the server enforces (contract REPORT_MAX_AGE_HOURS), so the form never accepts what the API rejects. */
 export const REPORT_MAX_AGE_MS = REPORT_MAX_AGE_HOURS * 3_600_000;

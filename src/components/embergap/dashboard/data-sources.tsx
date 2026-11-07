@@ -55,11 +55,9 @@ export function SourceChip({
     >
       {icon ? <span aria-hidden>{icon}</span> : null}
       <span className={wrap ? undefined : "truncate"}>{label}</span>
-      {synthetic === undefined ? null : (
-        <span className={cn("ml-0.5 rounded-sm px-1 text-[10px] uppercase", synthetic ? "bg-stone-200 dark:bg-stone-800" : "bg-sky-100 dark:bg-sky-900")}>
-          {synthetic ? "Demo" : "Live"}
-        </span>
-      )}
+      {synthetic === false ? (
+        <span className="ml-0.5 rounded-sm bg-sky-100 px-1 text-[10px] uppercase dark:bg-sky-900">Live</span>
+      ) : null}
     </span>
   );
 }

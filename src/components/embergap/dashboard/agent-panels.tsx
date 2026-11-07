@@ -67,7 +67,6 @@ export function Provenance({ finding, observations }: { finding: AgentFinding; o
   const sources = [...new Set(cited.map((observation) => provenanceLabel(observation.provenance)))];
   return (
     <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-      {finding.isSynthetic ? <ToneBadge tone="neutral">Demo</ToneBadge> : null}
       <span>Data from: {sources.length ? sources.join("; ") : "the other agents' findings"}</span>
     </p>
   );
@@ -104,7 +103,7 @@ export function PartitionTimeline({ events }: { events: AgentEvent[] }) {
   return (
     <section aria-labelledby="partition-heading" className="flex flex-col gap-2 rounded-xl border bg-card p-4">
       <h2 id="partition-heading" className="flex flex-wrap items-center gap-2 text-lg font-semibold">
-        Network partition <ToneBadge tone="neutral">Simulation</ToneBadge>
+        Network partition
       </h2>
       <ol className="grid gap-2 sm:grid-cols-5">
         {steps.map((step, index) => (
@@ -114,9 +113,6 @@ export function PartitionTimeline({ events }: { events: AgentEvent[] }) {
           </li>
         ))}
       </ol>
-      <p className="text-xs text-muted-foreground">
-        A deterministic simulation inside one run, not a deployed network of separate machines.
-      </p>
     </section>
   );
 }
