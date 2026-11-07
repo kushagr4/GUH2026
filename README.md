@@ -1,10 +1,24 @@
 # GUH2026 Starter
 
-A reusable foundation for building and demoing a web app at GreatUniHack 2026. It has working auth, a protected database, private file storage, Realtime and AI utilities, and no product idea yet.
+A reusable foundation for GreatUniHack 2026, now being developed into **EmberGap**, a collaborative wildfire-evidence investigation prototype. The existing starter includes working auth, protected database, private storage, Realtime and AI utilities.
 
 **Stack:** Next.js 16, TypeScript, Tailwind CSS, shadcn/ui, Supabase, Vitest, Playwright.
 
 **Every teammate runs their own Supabase locally in Docker.** There are no keys to ask for and no `.env` to fill in.
+
+## EmberGap: who builds what
+
+The active GreatUniHack project is **EmberGap**, a multi-agent wildfire-evidence investigation prototype. Full technical boundaries, API contracts and safety rules: [docs/architecture.md](docs/architecture.md#five-contributor-work-split-definitive-ownership). Agent-specific rules: [CLAUDE.md](CLAUDE.md) and [AGENTS.md](AGENTS.md).
+
+| Contributor | Workstream | Dedicated branch |
+| --- | --- | --- |
+| **Claude on Mac** | Shared contracts, database migrations, secure **POST report API**, private photo storage, final integration | `feat/embergap-core` |
+| **Claude on PC** | **Open-Meteo + EONET APIs**, autonomous worker queues, network partitions, reconciliation | `feat/embergap-data-runtime` |
+| **Danil** | Claude Vision, witness checks, independent evidence validation and fusion | `feat/embergap-validation` |
+| **Outrolife** | **NASA FIRMS API, GET map + investigation APIs, map/dashboard UI** | `feat/embergap-map-api` |
+| **d3vmakes** | Human-report form/UI, basic interaction tests and one short internal QA walkthrough | `feat/embergap-report-ui` |
+
+**Start in parallel.** Mac publishes shared types first; Outrolife can start the read APIs and map with deterministic mock fixtures without waiting for the backend. d3vmakes can start the form against mock POST responses. Mac is the sole owner of shared contracts, migrations, and root navigation. **Minimal manual user testing only:** one short internal walkthrough. Do not skip automated security, CI or critical agent correctness tests. Every change still uses a PR and one independent human reviewer.
 
 ## Quick start
 
