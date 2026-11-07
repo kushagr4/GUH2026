@@ -1,10 +1,10 @@
 # Team workflow
 
-Each teammate now has an independent Docker-backed local database. SQL migrations are shared through Git, while the hosted project remains reserved for demo/deployment.
+Each teammate has their own local Supabase in Docker (see [docker-development.md](docker-development.md)), built from `supabase/migrations/`. Code and migrations are shared through Git. Data isn't. The hosted free-plan project is for the deployed demo, and only the migration owner changes its schema.
 
 ## Frontend and app changes
 
-Everyone has their own branch, dev server, independent local Supabase and automatically generated `.env.local`.
+Everyone has their own branch, dev server, local Supabase and `.env.local`, so this work can't disturb anyone else.
 
 1. `git switch -c feature/short-name`
 2. Build it, and commit small.
@@ -34,9 +34,10 @@ To hand over, change `supabase/MIGRATION_OWNER` in a PR, invite the new owner to
 
 1. **Create the file:** `npm run db:new -- add_things`
 2. **Write it.** The template includes the required grants, RLS and policies.
-3. **Check it:** `npm run db:lint`
-4. **Open a PR** containing only that migration and the code that needs it.
-5. **The owner reviews and merges,** then applies it and commits the new types:
+3. **Try it locally:** `npm run local:migrate`, then `npm run local:types`. Check it in the app, in Studio (<http://127.0.0.1:54323>) and with `npm run local:test`.
+4. **Check it:** `npm run db:lint`
+5. **Open a PR** containing only that migration, the regenerated types and the code that needs it.
+6. **The owner reviews and merges,** then applies it to the hosted project and checks that the hosted types match:
 
 ```bash
 git switch main
@@ -55,14 +56,15 @@ npm run db:push
 ```
 
 ```bash
-npm run db:types
+npm run db:types -- --check
 ```
 
-6. **The owner pushes the types** to `main`, and teammates pull.
+   The check compares the schema, not formatting, so types generated locally pass. If it fails, the hosted schema differs from the migrations: run `npm run db:types` and commit the result.
+7. **Teammates pull.** Their next `npm run local:dev` applies the new migration to their own database.
 
 ### Keeping your code working until the migration lands
 
-Your branch may need a table that isn't live yet. The app shows a clear error rather than crashing, and `/dev` shows what's missing. If you're blocked, ask the owner to apply your reviewed migration early rather than changing the database yourself.
+Locally, your table is live as soon as you run `npm run local:migrate`, so you're never blocked. The hosted demo gets it only after the owner applies it. Until then, the deployed app shows a clear error rather than crashing, and `/dev` shows what's missing.
 
 ### Rules that prevent conflicts
 
@@ -70,17 +72,17 @@ Your branch may need a table that isn't live yet. The app shows a clear error ra
 - **One owner per table.** Agree who is changing which table.
 - **Prefix by feature** when two people work in parallel, for example `poll_votes` and `poll_options`.
 - **Never edit a migration that has been applied.** Write a new one.
-- **Never change the schema in the dashboard or through MCP** without a matching migration file. Otherwise the next `db push` and the types drift from reality.
+- **Never change the schema in Studio, the dashboard or through MCP** without a matching migration file. Otherwise your teammates' databases, the hosted project and the types drift apart.
 
 ### If two migrations collide
 
-Supabase applies files in timestamp order and rejects a file older than one already applied. If yours was overtaken, rename it with a new timestamp and push the change. Don't use `--include-all` on the shared database.
+Supabase applies files in timestamp order and rejects a file older than one already applied. If yours was overtaken, rename it with a new timestamp and push the change. Don't use `--include-all` on the hosted database. Locally, `npm run local:migrate -- --include-all` is fine for catching up after a pull.
 
 If two people add the same table, the second one to merge rewrites theirs as an `alter table`.
 
 ### Undoing a mistake
 
-There's no reset on a shared database. Write a new forward migration that corrects the mistake, and include a `-- migration-allow: destructive <reason>` line if it has to remove something.
+There's no reset on the hosted database. Write a new forward migration that corrects the mistake, and include a `-- migration-allow: destructive <reason>` line if it has to remove something. Locally, you may rebuild your own database from the files with `npm run local:reset -- --yes-delete-local-data`, which deletes your local data.
 
 ## Reviewing a migration
 
@@ -92,7 +94,7 @@ There's no reset on a shared database. Write a new forward migration that correc
 
 ## Secrets
 
-- Teammates only need Docker and `npm run local:dev`; public local connection values are generated automatically.
+- For local development, teammates need no shared values. `npm run local:dev` writes the local URL and publishable key itself, and nothing else.
 - `.env.local` and `.env.test.local` are gitignored. Never commit them.
 - Share values through a private channel the team trusts. Never put the secret key anywhere shared.
 - CI needs no secrets. Hosted CI is opt-in and uses GitHub Actions secrets.

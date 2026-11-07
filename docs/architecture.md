@@ -3,26 +3,28 @@
 ## Overview
 
 ```
- Developer laptop (no Docker)              Supabase Cloud (free plan)
-┌──────────────────────────┐              ┌───────────────────────────┐
-│ npm run dev (Next.js)    │              │ One shared project        │
-│  ├─ browser client ──────┼─ publishable ┼─► Auth                    │
-│  ├─ server client ───────┼─ key + user ─┼─► Postgres (RLS)          │
-│  └─ proxy.ts (session)   │   session    │   Storage (private)       │
-└──────────────────────────┘              │   Realtime                │
-                                          └─────────▲─────────────────┘
- Migration owner only                               │
-  npm run db:push ──── Supabase CLI ────────────────┘
+ Each developer laptop                               Supabase Cloud (free plan)
+┌──────────────────────────────────────────┐        ┌──────────────────────────┐
+│ npm run local:dev                        │        │ Hosted project, for the  │
+│  Next.js (localhost:3000)                │        │ deployed demo only       │
+│   ├─ browser client ─┐ publishable key   │        │  Auth, Postgres (RLS),   │
+│   ├─ server client ──┤ + user session    │        │  Storage, Realtime       │
+│   └─ proxy.ts        ▼                   │        └────────────▲─────────────┘
+│  Supabase CLI stack in Docker            │                     │
+│   (127.0.0.1:54321) Auth, Postgres (RLS),│   Migration owner,  │
+│   Storage, Realtime, REST, Studio        │   from main only:   │
+│   built from supabase/migrations/        │   npm run db:push ──┘
+└──────────────────────────────────────────┘
 ```
 
-Every developer runs their own Next.js server, so frontend work is isolated. The backend is shared, so schema changes follow the process in [team-workflow.md](team-workflow.md).
+Every developer runs their own Next.js server and their own Supabase, so neither frontend work nor data can disturb anyone else. Migrations in Git are the shared truth: they build every local database, and the owner applies them to the hosted project, as described in [team-workflow.md](team-workflow.md).
 
 ## Why these decisions
 
 | Decision | Reason |
 | --- | --- |
-| Hosted Supabase, no local stack | Some teammates don't have Docker, and setup has to take minutes |
-| One project on the free plan | The team's budget. It also removes environment drift |
+| Local Supabase per developer, via the CLI's own Docker stack | No shared keys to hand out, no rate limits or shared data to trip over, and one command to set up. No Compose file to maintain |
+| One hosted project on the free plan, for the demo | The team's budget. Only the migration owner changes it |
 | CLI `db push` for migrations, MCP read-only | One write path keeps the migration history correct |
 | Next.js proxy protects all of `/app/*` | New pages are secure by default, with no list to maintain |
 | Password auth, with "Confirm email" off | The built-in mailer is too restricted to rely on in a demo |
