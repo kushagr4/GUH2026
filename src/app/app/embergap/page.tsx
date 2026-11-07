@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { PageHeader } from "@/components/page-header";
 import { EmberGapDashboard } from "@/components/embergap/dashboard/embergap-dashboard";
 import { SafetyNotice } from "@/components/embergap/dashboard/notices";
 import { getMapData } from "@/lib/embergap/read/map";
@@ -14,21 +13,19 @@ export const metadata: Metadata = { title: "EmberGap map" };
 export default async function EmberGapPage() {
   await requireUser();
   const initialData = await getMapData(
-    { bbox: DEFAULT_REGION.bbox, limit: 100 },
+    { bbox: DEFAULT_REGION.bbox, limit: 200 },
     { repository: await getReadRepository() },
   );
 
   return (
-    <div className="flex flex-col gap-6">
-      <PageHeader
-        title="Wildfire evidence map"
-        description="Possible wildfire reports and satellite thermal anomalies, for human review. Nothing on this map is a confirmed fire."
-        actions={
-          <Button asChild>
-            <Link href="/app/embergap/report">Report a possible fire</Link>
-          </Button>
-        }
-      />
+    // Wider than the shared 1024px shell: the map gets the whole viewport width.
+    <div className="mx-[calc(50%-50vw+1rem)] -mt-2 flex flex-col gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-semibold tracking-tight">Wildfire evidence map</h1>
+        <Button asChild size="sm">
+          <Link href="/app/embergap/report">Report a possible fire</Link>
+        </Button>
+      </div>
       <SafetyNotice />
       <EmberGapDashboard regions={DEMO_REGIONS} initialRegionId={DEFAULT_REGION.id} initialData={initialData} />
     </div>

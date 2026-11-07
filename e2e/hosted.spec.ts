@@ -47,7 +47,7 @@ test.describe("hosted journey", () => {
 
   test("signs in, keeps the session across reloads, and signs out", async ({ page }) => {
     await signIn(page);
-    await expect(page).toHaveURL(/\/app\/dashboard/);
+    await expect(page).toHaveURL(/\/app\/embergap/);
     await expect(page.getByTestId("user-email")).toHaveText(user.email);
 
     await page.reload();
@@ -70,7 +70,7 @@ test.describe("hosted journey", () => {
     await page.getByLabel("Email").fill(newTestEmail());
     await page.getByLabel("Password").fill(`Test-${crypto.randomUUID()}`);
     await page.getByRole("button", { name: "Create account" }).click();
-    await expect(page).toHaveURL(/\/app\/dashboard/);
+    await expect(page).toHaveURL(/\/app\/embergap/);
     // The sweep at the start of the next integration run removes this user.
   });
 

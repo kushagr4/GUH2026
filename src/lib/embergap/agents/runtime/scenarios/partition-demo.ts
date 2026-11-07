@@ -36,7 +36,6 @@ import { createSimulatedNetwork, type LinkPolicy, type NetworkStatus } from "../
 import type { RuntimeTask } from "../processors";
 import { createSimulation, type Reconciliation, type RuntimeStatus, type ScenarioAction, type TimelineEntry } from "../simulation";
 import { createMemoryRuntimeStore } from "../store";
-import { DANIL_ON_EVIDENCE, DANIL_PROCESSORS } from "@/lib/embergap/agents/fusion/runtime-processors";
 import { createDemoAgents, DEMO_AGENT_IDS, type DemoAgentOptions } from "./demo-agents";
 
 export const DEMO_PHASES = { connectedAt: 0, partitionedAt: 4_000, recoveredAt: 12_000 } as const;
@@ -329,15 +328,9 @@ export async function runPartitionDemo(options: PartitionDemoOptions = {}): Prom
   const maxTimeMs = options.maxTimeMs ?? 60_000;
   const memory = options.store ? null : createMemoryRuntimeStore();
   const store = options.store ?? memory!;
-  // Danil's vision validator and fusion are the defaults (his labelled fixtures in synthetic mode),
-  // so fusion visibly re-decides as evidence reaches it. Pass processors to swap any of them.
-  const agents = createDemoAgents({
-    runId,
-    store,
-    processors: { ...DANIL_PROCESSORS, ...options.processors },
-    onEvidence: { ...DANIL_ON_EVIDENCE, ...options.onEvidence },
-    epochIso: SYNTHETIC_NOW,
-  });
+  // createDemoAgents defaults to Danil's vision validator and fusion, so fusion
+  // visibly re-decides as evidence reaches it. Pass processors to swap any of them.
+  const agents = createDemoAgents({ runId, store, processors: options.processors, onEvidence: options.onEvidence, epochIso: SYNTHETIC_NOW });
   const network = createSimulatedNetwork({ nodes: [...DEMO_AGENT_IDS], seed, defaultLink: { ...DEMO_LINK, ...options.link } });
   const simulation = createSimulation({ host: createInProcessHost(agents), network, store, runId, isSynthetic: true, epochIso: SYNTHETIC_NOW });
   const actions = demoActions();

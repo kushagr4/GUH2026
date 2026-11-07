@@ -26,10 +26,10 @@ import {
   type Timestamp,
 } from "@/lib/embergap/contracts";
 import {
-  DANIL_ON_EVIDENCE,
-  danilFusionProcessor,
-  danilVisionProcessor,
-  type DanilVisionInput,
+  fusionOnEvidence,
+  fusionProcessor,
+  visionValidatorProcessor,
+  type VisionTaskInput,
 } from "@/lib/embergap/agents/fusion/runtime-processors";
 import { RuntimeAgent } from "../agent";
 import { createInProcessHost } from "../hosts/in-process";
@@ -74,7 +74,7 @@ export type InvestigationAgentsInput = {
   /** Danil's validated witness findings, canonical. */
   witnessFindings?: AgentFinding[];
   /** Model output the server already fetched for one photo, for Danil's vision processor. */
-  vision?: DanilVisionInput | null;
+  vision?: VisionTaskInput | null;
   store: EmberGapRuntimeStore;
   signal?: AbortSignal;
   /** Real-time budget for the simulation loop. Defaults to 10 s; it normally needs well under 1 s. */
@@ -115,9 +115,9 @@ export type InvestigationAgentsResult = {
 const DEFAULT_PROCESSORS: Record<(typeof INVESTIGATION_AGENT_IDS)[number], readonly TaskProcessor<never>[]> = {
   weather: [weatherObservationsProcessor, eonetObservationsProcessor] as unknown as TaskProcessor<never>[],
   satellite: [satelliteObservationsProcessor] as unknown as TaskProcessor<never>[],
-  vision: [danilVisionProcessor] as unknown as TaskProcessor<never>[],
+  vision: [visionValidatorProcessor] as unknown as TaskProcessor<never>[],
   witness: [witnessFindingsProcessor] as unknown as TaskProcessor<never>[],
-  fusion: [danilFusionProcessor] as unknown as TaskProcessor<never>[],
+  fusion: [fusionProcessor] as unknown as TaskProcessor<never>[],
 };
 
 const CANONICAL = new Set<string>(AGENT_IDS);
@@ -147,7 +147,7 @@ export async function runInvestigationAgents(input: InvestigationAgentsInput): P
       runId: input.runId,
       peers: INVESTIGATION_AGENT_IDS.filter((peer) => peer !== id),
       processors: [...DEFAULT_PROCESSORS[id].filter((processor) => !kinds.has(processor.kind)), ...custom],
-      onEvidence: input.onEvidence?.[id] ?? (id === "fusion" ? DANIL_ON_EVIDENCE.fusion : undefined),
+      onEvidence: input.onEvidence?.[id] ?? (id === "fusion" ? fusionOnEvidence : undefined),
       store: input.store,
       mode: input.mode,
       epochIso: input.startedAt,

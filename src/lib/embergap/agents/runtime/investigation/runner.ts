@@ -22,7 +22,7 @@ import {
   type SourceAvailability,
   type Timestamp,
 } from "@/lib/embergap/contracts";
-import type { DanilVisionInput } from "@/lib/embergap/agents/fusion/runtime-processors";
+import type { VisionTaskInput } from "@/lib/embergap/agents/fusion/runtime-processors";
 import { createEonetSourceAdapter } from "@/lib/embergap/sources/eonet/eonet";
 import { getThermalAnomalies } from "@/lib/embergap/sources/firms";
 import { createOpenMeteoSourceAdapter } from "@/lib/embergap/sources/weather/open-meteo";
@@ -49,7 +49,7 @@ export type RuntimeRunnerOptions = {
   /** Danil's validated witness findings, canonical (for example his pipeline through Mac's toCanonicalFinding). */
   witnessFindings?: (run: RuntimeInvestigationRun) => Promise<AgentFinding[]>;
   /** Model output the server fetched for the report's photo, for Danil's vision processor. */
-  vision?: (run: RuntimeInvestigationRun) => Promise<DanilVisionInput | null>;
+  vision?: (run: RuntimeInvestigationRun) => Promise<VisionTaskInput | null>;
   /** Show agents working through a simulated partition within the run. */
   simulatePartition?: boolean | SimulatedPartition;
   /** Called with the run's summary, for logs or a demo panel. */

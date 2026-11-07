@@ -118,7 +118,7 @@ export async function runEmbergapPartitionDemo() {
 
 - **Records** land on the seeded synthetic investigations `partition-recovery` and `weather-timeout`, so they appear in the existing read APIs next to the seeded demo data.
 - **Step-by-step display without stored agent state:** `runPartitionDemo({ seed, runId, stopAtMs })` replays deterministically to any simulated time, so each request recomputes the same state. Alternatively, return the full result once and let the UI animate its `phases` and `timeline`.
-- **Real investigations:** fetch context on the server with `getOpenMeteo().getWeatherContext(...)` and `getEonet().getWildfireContext(...)`. Then enqueue `weather.context` (`{ context }`) and `eonet.context` (`{ context, timeOfInterest }`) on a `weather` agent from `createDemoAgents({ runId, store, mode: "live" })`, and drive it with `createSimulation`. Live mode refuses synthetic stand-ins and synthetic records.
+- **Real investigations:** use `createRuntimeInvestigationRunner()` or `runInvestigationAgents()`, described above.
 
 ### What the partition demo shows
 
@@ -133,18 +133,13 @@ For the weather-timeout investigation, which arrives during the partition, the f
 
 The run takes about 0.2 s and returns about 73 KB. It reports 40 events redelivered across the old cut, 318 duplicates ignored and 7 tasks finished while partitioned.
 
-## Plugging in validators and fusion (Danil)
+## Validators and fusion (Danil)
 
-Pass processors per agent; one with the same `kind` replaces the stand-in:
+The real vision validator and fusion are now the **defaults** (`fusion/runtime-processors.ts`), so `runPartitionDemo()` and `createDemoAgents()` use them with no extra options:
 
-```ts
-runPartitionDemo({
-  processors: { vision: [visionProcessor], fusion: [fusionProcessor] },
-  onEvidence: { fusion: ({ evidence, newEvents }) => [/* tasks, e.g. id `fusion:${investigationId}:${n}` */] },
-});
-```
-
-`defineProcessor({ kind, input: zodSchema, run(ctx) })` receives the validated `ctx.input`, `ctx.upstream` (complete outputs of its `after` tasks), and `ctx.evidence` (canonical observations and findings this agent holds). It returns `{ observations?, findings?, followUps? }`. Call Claude before enqueueing, and pass the validated model output as the task input. `onEvidence` lets fusion re-run as evidence arrives: derive the task id from the evidence so each evidence set runs once.
+- `vision.assess` runs `visionValidatorProcessor`: Danil's guardrails on model output that the server fetched **before** queueing the task (`modelOutput` in the task input). In synthetic mode with no model output it uses the labelled fixture matching `smokeLike`; live mode refuses fixtures. `visionStandIn` is kept only for comparison.
+- The fusion agent runs `fusionProcessor`, re-triggered by `fusionOnEvidence` once per distinct evidence set. Its advice is a canonical `recommendation` with `assessment: "context"`. It keeps fusing locally while partitioned, which shows up in `completedWhileIsolated`.
+- To override, pass processors of the same `kind` through `processors`, or a hook through `onEvidence`. `VALIDATION_PROCESSORS` and `VALIDATION_ON_EVIDENCE` are exported for explicit wiring.
 
 ## Showing it (Outrolife)
 
@@ -155,6 +150,6 @@ runPartitionDemo({
 
 - **One process.** It's a simulation: agents are logically isolated objects in one process, with no shared references (every boundary is a JSON copy). They aren't separate machines, and nothing here is production-grade distributed infrastructure.
 - **Authentication and conflicts.** Agents don't authenticate each other cryptographically. Conflict detection catches divergent copies, and the canonical copy converges deterministically, but spreading the conflict record to every replica is best effort.
-- **Stand-ins.** In the partition demo the satellite agent runs a labelled synthetic stand-in, and vision runs Danil's validator on his labelled fixtures. Real investigations take real FIRMS observations through `satellite.observations`, and live vision needs model output fetched before the run.
+- **Stand-ins.** In the partition demo the satellite agent runs a labelled synthetic stand-in. Real investigations take real FIRMS observations through `satellite.observations` (Outrolife's `getThermalAnomalies`, mapped by `firmsObservationsFor`). Vision runs Danil's validator; live vision needs the server to fetch Claude's output first.
 - **Heuristics.** Weather thresholds (humidity under 30%, wind of 25 km/h or more, 2 mm of rain in 24 hours) are uncalibrated descriptions, never a fire verdict.
 - **No baseline.** No centralised baseline was measured, so this makes no improvement claims.
