@@ -22,3 +22,48 @@ export {
   type ScenarioResult,
   type StrategyDecision,
 } from "./evaluate";
+export {
+  EXTERNAL_AGENT_IDS,
+  WITNESS_AGENT_FAILED,
+  runValidationPipeline,
+  withMockVisionAnalyzer,
+  type PipelineInput,
+  type PipelineVisionInput,
+  type PipelineOptions,
+  type PipelineMode,
+  type PipelineStep,
+  type PipelineResult,
+} from "./pipeline";
+export {
+  DEMO_AREA,
+  RAW_SCENARIOS,
+  RAW_SCENARIO_VISION_TIMEOUT_MS,
+  createRawScenarioDeps,
+  evaluateRawScenarios,
+  runRawScenario,
+  type RawEvaluation,
+  type RawScenario,
+} from "./raw-scenarios";
+export {
+  DEMO_DISCLAIMER,
+  DEMO_MIN_PUBLIC_PRECISION_M,
+  buildDemoInvestigations,
+  decimalsForPrecision,
+  toApproxLocation,
+  type DemoAgentStep,
+  type DemoFinding,
+  type DemoInvestigation,
+} from "./demo-export";
+export {
+  simulatePartitionTimeline,
+  type TimelineEvent,
+  type TimelineEventKind,
+  type TimelineInput,
+  type TimelineMetrics,
+  type TimelinePartition,
+  type TimelinePhase,
+  type TimelineRecommendation,
+  type TimelineResult,
+  type TimelineStep,
+} from "./timeline";
+export { TIMELINE_SCENARIOS, type TimelineScenario } from "./timeline-scenarios";
