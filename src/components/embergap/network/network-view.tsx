@@ -21,6 +21,13 @@ function words(value: string) {
   return value.replace(/_/g, " ");
 }
 
+/** The first sentence, so cards stay readable on a projector; the full text is in the tooltip. */
+function firstSentence(text: string) {
+  const end = text.search(/[.!?](\s|$)/);
+  const sentence = end === -1 ? text : text.slice(0, end + 1);
+  return sentence.length > 200 ? `${sentence.slice(0, 197)}…` : sentence;
+}
+
 function seconds(ms: number) {
   return `${(ms / 1000).toFixed(1)} s`;
 }
@@ -182,9 +189,9 @@ function NodeCard({ node, previous, stage }: { node: NodeView; previous?: NodeVi
           <FusionBlock node={node} previous={previous} />
         </div>
       ) : node.latestFinding ? (
-        <p className="text-muted-foreground">
+        <p className="text-muted-foreground" title={node.latestFinding.summary}>
           <span className="font-medium text-foreground">Latest ({node.latestFinding.report}):</span> {words(node.latestFinding.assessment)}
-          {node.latestFinding.reasonCodes.length ? ` · ${node.latestFinding.reasonCodes.join(", ")}` : ""}. {node.latestFinding.summary}
+          {node.latestFinding.reasonCodes.length ? ` · ${node.latestFinding.reasonCodes.join(", ")}` : ""}. {firstSentence(node.latestFinding.summary)}
         </p>
       ) : null}
     </article>
