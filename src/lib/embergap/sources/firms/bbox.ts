@@ -4,7 +4,7 @@ import type { Bbox } from "@/lib/embergap/contracts";
  * Largest viewport for a live FIRMS query, to keep requests and responses
  * small. Parsing itself uses the shared contract's `parseBbox`.
  */
-export const MAX_FIRMS_BBOX_SPAN = { lon: 30, lat: 20 } as const;
+export const MAX_FIRMS_BBOX_SPAN = { lon: 100, lat: 70 } as const;
 
 export function isWithinFirmsSpan(bbox: Bbox): boolean {
   return (

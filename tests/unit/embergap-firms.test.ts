@@ -98,7 +98,8 @@ describe("bbox helpers", () => {
     expect(bboxContains(BBOX, 54, -1.9)).toBe(false);
     expect(bboxContains(null, 0, 0)).toBe(true);
     expect(isWithinFirmsSpan(BBOX)).toBe(true);
-    expect(isWithinFirmsSpan({ minLongitude: -60, minLatitude: 0, maxLongitude: 0, maxLatitude: 10 })).toBe(false);
+    expect(isWithinFirmsSpan({ minLongitude: -60, minLatitude: 0, maxLongitude: 0, maxLatitude: 10 })).toBe(true);
+    expect(isWithinFirmsSpan({ minLongitude: -120, minLatitude: 0, maxLongitude: 0, maxLatitude: 10 })).toBe(false);
   });
 });
 

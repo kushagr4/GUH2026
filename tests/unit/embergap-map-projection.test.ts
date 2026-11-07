@@ -165,3 +165,14 @@ describe("smooth zooming helpers", () => {
     expect(new Set([...sharp, ...coarse].map((t) => t.key)).size).toBe(sharp.length + coarse.length);
   });
 });
+
+describe("wide regions", () => {
+  it("every preset is accepted by the map API, and Europe, North Africa and the Middle East are covered", async () => {
+    const { isWithinFirmsSpan } = await import("@/lib/embergap/sources/firms/bbox");
+    for (const region of DEMO_REGIONS) expect(isWithinFirmsSpan(region.bbox), region.id).toBe(true);
+    const wide = DEMO_REGIONS.find((region) => region.id === "europe-africa-asia")!.bbox;
+    for (const [lat, lon] of [[51.5, -0.1], [64.1, -21.9], [30.0, 31.2], [33.6, -7.6], [35.7, 51.4], [41.0, 29.0]] as const) {
+      expect(lat >= wide.minLatitude && lat <= wide.maxLatitude && lon >= wide.minLongitude && lon <= wide.maxLongitude, `${lat},${lon}`).toBe(true);
+    }
+  });
+});

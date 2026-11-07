@@ -5,8 +5,9 @@ import type { Bbox } from "@/lib/embergap/contracts";
  * scenarios (SYNTHETIC_SCENARIOS) are placed across Italy, and labelled
  * synthetic FIRMS detections sit in Campania's wine country. The places are
  * real so the map is recognisable; every report, investigation and detection
- * shown in demo mode is SYNTHETIC. Every preset fits the map API's bbox limit
- * (30 x 20 degrees).
+ * shown in demo mode is SYNTHETIC. The wider presets cover Europe, North Africa
+ * and the Middle East for live NASA FIRMS data. Every preset fits the map
+ * API's bbox limit (MAX_FIRMS_BBOX_SPAN, 100 x 70 degrees).
  */
 export type MapRegion = { id: string; name: string; bbox: Bbox };
 
@@ -15,6 +16,31 @@ export const DEMO_REGIONS: readonly MapRegion[] = [
     id: "italy",
     name: "Italy (all scenarios)",
     bbox: { minLongitude: 6.5, minLatitude: 35.5, maxLongitude: 19.0, maxLatitude: 47.5 },
+  },
+  {
+    id: "europe-africa-asia",
+    name: "Europe, North Africa & Middle East",
+    bbox: { minLongitude: -25.0, minLatitude: 15.0, maxLongitude: 65.0, maxLatitude: 71.5 },
+  },
+  {
+    id: "europe",
+    name: "Europe",
+    bbox: { minLongitude: -25.0, minLatitude: 34.0, maxLongitude: 45.0, maxLatitude: 71.5 },
+  },
+  {
+    id: "mediterranean",
+    name: "Mediterranean",
+    bbox: { minLongitude: -10.0, minLatitude: 29.0, maxLongitude: 37.0, maxLatitude: 47.0 },
+  },
+  {
+    id: "north-africa",
+    name: "North Africa",
+    bbox: { minLongitude: -18.0, minLatitude: 15.0, maxLongitude: 35.0, maxLatitude: 38.0 },
+  },
+  {
+    id: "middle-east",
+    name: "Middle East & Turkey",
+    bbox: { minLongitude: 25.0, minLatitude: 12.0, maxLongitude: 63.0, maxLatitude: 43.0 },
   },
   {
     id: "sardinia",
