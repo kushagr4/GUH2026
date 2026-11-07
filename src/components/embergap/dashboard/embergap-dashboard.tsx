@@ -128,15 +128,15 @@ export function EmberGapDashboard({
   }
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground" aria-live="polite">
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground" aria-live="polite">
         {data.mode !== "live" ? <ToneBadge tone="neutral">Synthetic data</ToneBadge> : null}
         {firms ? (
           <ToneBadge tone={SOURCE_STATE_TONE[firms.state]}>
             FIRMS {satelliteLive ? "live" : "demo"} · {SOURCE_STATE_LABEL[firms.state]}
           </ToneBadge>
         ) : null}
-        {firms ? <span>{formatUtc(firms.checkedAt)}</span> : null}
+        {firms ? <span>Checked {formatUtc(firms.checkedAt)}</span> : null}
         {loading ? <span>Loading…</span> : null}
         {error ? (
           <span role="alert" className="text-red-700 dark:text-red-300">
@@ -164,7 +164,7 @@ export function EmberGapDashboard({
         </div>
       </div>
 
-      <div className={side ? "grid gap-3 lg:grid-cols-[minmax(0,1fr)_20rem]" : "flex flex-col gap-3"}>
+      <div className={side ? "grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]" : "flex flex-col gap-4"}>
         <HeatMap
           features={data.features}
           regions={regions}
@@ -173,16 +173,21 @@ export function EmberGapDashboard({
           onSelect={select}
           onViewSettled={load}
           labelFor={featureLabel}
-          className="h-[65vh] min-h-[420px] w-full lg:h-[calc(100vh-13rem)]"
+          className="h-[56vh] min-h-[360px] w-full shadow-sm sm:min-h-[440px] lg:h-[min(68vh,700px)]"
         />
 
-        <div
+        <aside
+          aria-label="Evidence in this map view"
           className={
             side
-              ? "flex flex-col gap-3 lg:max-h-[calc(100vh-13rem)] lg:overflow-y-auto"
+              ? "flex flex-col gap-3 lg:max-h-[min(68vh,700px)] lg:overflow-y-auto"
               : "grid items-start gap-3 md:grid-cols-2"
           }
         >
+          <div className={side ? "px-1 pb-1" : "px-1 pb-1 md:col-span-2"}>
+            <h2 className="text-lg font-semibold tracking-tight">Evidence in view</h2>
+            <p className="mt-1 text-sm leading-5 text-muted-foreground">Select an item to see its details on the map.</p>
+          </div>
           <Section
             title="Investigations"
             tone="rose"
@@ -217,7 +222,7 @@ export function EmberGapDashboard({
               />
             ))}
           </Section>
-        </div>
+        </aside>
       </div>
     </div>
   );
@@ -262,13 +267,13 @@ function Section({
   children: ReactNode;
 }) {
   return (
-    <details open={open} className={cn("rounded-xl border border-t-4 bg-card", SECTION_TONE[tone].edge)}>
+    <details open={open} className={cn("overflow-hidden rounded-xl border border-t-4 bg-card shadow-sm", SECTION_TONE[tone].edge)}>
       <summary
         onClick={(event) => {
           event.preventDefault();
           onToggle();
         }}
-        className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2.5 text-sm font-medium [&::-webkit-details-marker]:hidden"
+        className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-4 text-sm font-semibold hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-offset-[-3px] [&::-webkit-details-marker]:hidden"
       >
         <span className="flex items-center gap-2">
           {title}
@@ -281,7 +286,7 @@ function Section({
       {count === 0 ? (
         <p className="px-3 pb-3 text-xs text-muted-foreground">None in view.</p>
       ) : (
-        <ul className="flex flex-col gap-1 px-2 pb-2">{children}</ul>
+        <ul className="flex flex-col gap-1 border-t px-2 py-2">{children}</ul>
       )}
     </details>
   );
@@ -313,7 +318,7 @@ function Item({
             event.preventDefault();
             onToggle();
           }}
-          className="flex cursor-pointer list-none items-center gap-2 px-2 py-1.5 text-sm [&::-webkit-details-marker]:hidden"
+          className="flex min-h-12 cursor-pointer list-none items-center gap-2 px-3 py-2.5 text-sm focus-visible:outline-2 focus-visible:outline-offset-[-3px] [&::-webkit-details-marker]:hidden"
         >
           <span
             aria-hidden
@@ -330,11 +335,11 @@ function Item({
                   : "bg-stone-400",
             )}
           />
-          <span className="min-w-0 flex-1 truncate">{featureLabel(feature)}</span>
+          <span className="min-w-0 flex-1 leading-5">{featureLabel(feature)}</span>
           <span className="shrink-0 text-xs text-muted-foreground">{age(feature, now)}</span>
           <Chevron open={open} />
         </summary>
-        <div className="flex flex-col gap-2 px-2 pt-1 pb-2.5 text-xs">
+        <div className="flex flex-col gap-3 px-3 pt-1 pb-4 text-sm leading-5">
           {feature.kind === "investigation" ? (
             <>
               <div className="flex flex-wrap gap-1.5">

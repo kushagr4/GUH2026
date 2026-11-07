@@ -50,72 +50,72 @@
 }
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  --background: #fffaf3;
+  --foreground: #312018;
+  --card: #fffefb;
+  --card-foreground: #312018;
+  --popover: #fffefb;
+  --popover-foreground: #312018;
+  --primary: #b83d00;
+  --primary-foreground: #ffffff;
+  --secondary: #fff0df;
+  --secondary-foreground: #592c15;
+  --muted: #f9efe3;
+  --muted-foreground: #6e574a;
+  --accent: #fff0d3;
+  --accent-foreground: #592c15;
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
+  --border: #ecd9c8;
+  --input: #dfc7b3;
+  --ring: #c45114;
+  --chart-1: #e4570d;
+  --chart-2: #d78c08;
+  --chart-3: #b33e0b;
+  --chart-4: #8f4b22;
+  --chart-5: #60351f;
   --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar: #fff6eb;
+  --sidebar-foreground: #312018;
+  --sidebar-primary: #b83d00;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #fff0d3;
+  --sidebar-accent-foreground: #592c15;
+  --sidebar-border: #ecd9c8;
+  --sidebar-ring: #c45114;
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
+  --background: #211711;
+  --foreground: #fff5e8;
+  --card: #2d2018;
+  --card-foreground: #fff5e8;
+  --popover: #2d2018;
+  --popover-foreground: #fff5e8;
+  --primary: #ffb45d;
+  --primary-foreground: #361507;
+  --secondary: #443024;
+  --secondary-foreground: #fff5e8;
+  --muted: #443024;
+  --muted-foreground: #ddc8b6;
+  --accent: #4d3323;
+  --accent-foreground: #fff5e8;
   --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
+  --border: #674632;
+  --input: #75513a;
+  --ring: #ffb45d;
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --sidebar: #2d2018;
+  --sidebar-foreground: #fff5e8;
+  --sidebar-primary: #ffb45d;
+  --sidebar-primary-foreground: #361507;
+  --sidebar-accent: #4d3323;
+  --sidebar-accent-foreground: #fff5e8;
+  --sidebar-border: #674632;
+  --sidebar-ring: #ffb45d;
 }
 
 @layer base {
@@ -128,6 +128,12 @@
   html {
     @apply font-sans;
   }
+}
+
+.ember-workspace-hero {
+  background-color: #fff4e2;
+  background-image: radial-gradient(#efc6a1 0.7px, transparent 0.7px), linear-gradient(145deg, #fffaf2, #ffefd4);
+  background-size: 22px 22px, auto;
 }
 
 .ember-logo-flame {
