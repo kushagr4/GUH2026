@@ -20,10 +20,23 @@ const FORBIDDEN = [
   { label: "the SUPABASE_TEST_SECRET_KEY name", pattern: /SUPABASE_TEST_SECRET_KEY/ },
   { label: "the ANTHROPIC_API_KEY name", pattern: /ANTHROPIC_API_KEY/ },
   { label: "the Anthropic SDK", pattern: /api\.anthropic\.com/ },
+  { label: "a Firecrawl key", pattern: /\bfc-[a-f0-9]{32}\b/ },
+  { label: "a GitHub token", pattern: /\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})/ },
+  { label: "the FIRECRAWL_API_KEY name", pattern: /FIRECRAWL_API_KEY/ },
+  { label: "the GITHUB_API_TOKEN name", pattern: /GITHUB_API_TOKEN/ },
+  { label: "the GITHUB_WEBHOOK_SECRET name", pattern: /GITHUB_WEBHOOK_SECRET/ },
+  { label: "the Firecrawl client", pattern: /api\.firecrawl\.dev/ },
 ];
 
 // Also search for the literal values on this machine, whatever their format.
-const SECRET_VALUES = ["SUPABASE_SECRET_KEY", "SUPABASE_TEST_SECRET_KEY", "ANTHROPIC_API_KEY"]
+const SECRET_VALUES = [
+  "SUPABASE_SECRET_KEY",
+  "SUPABASE_TEST_SECRET_KEY",
+  "ANTHROPIC_API_KEY",
+  "FIRECRAWL_API_KEY",
+  "GITHUB_API_TOKEN",
+  "GITHUB_WEBHOOK_SECRET",
+]
   .map((name) => ({ name, value: process.env[name] }))
   .filter(({ value }) => value && value.length >= 8);
 

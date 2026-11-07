@@ -8,10 +8,14 @@ const { APP_PORT = "3100", PROD_GATE_PORT = "3101" } = process.env;
 const build = spawnSync(process.execPath, [NEXT, "build"], { stdio: "inherit" });
 if (build.status !== 0) process.exit(build.status ?? 1);
 
+// Next.js never overrides a variable that is already set, even to "", so this
+// keeps keys in .env.local away from the tests: no integration runs, nothing is spent.
+const OFFLINE = { FIRECRAWL_API_KEY: "", GITHUB_API_TOKEN: "", GITHUB_WEBHOOK_SECRET: "" };
+
 const serve = (port, extraEnv) =>
   spawn(process.execPath, [NEXT, "start", "-p", port, "-H", "127.0.0.1"], {
     stdio: "inherit",
-    env: { ...process.env, ...extraEnv },
+    env: { ...process.env, ...OFFLINE, ...extraEnv },
   });
 
 const servers = [

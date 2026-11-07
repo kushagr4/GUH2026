@@ -174,6 +174,21 @@ test.describe("hosted journey", () => {
     });
   });
 
+  test("lists optional integrations, off by default, without revealing values", async ({
+    page,
+  }) => {
+    await signIn(page);
+    await page.goto("/dev/integrations");
+    const list = page.getByTestId("integrations");
+    // The E2E server sets no integration variables, so nothing is spent here.
+    await expect(list.locator('[data-integration="firecrawl"]')).toHaveAttribute("data-state", "off");
+    await expect(list.locator('[data-integration="github"]')).toHaveAttribute("data-state", "ready");
+    await expect(
+      page.getByTestId("firecrawl-check").getByRole("button", { name: "Scrape" }),
+    ).toBeDisabled();
+    expect(await page.content()).not.toMatch(/\bfc-[a-f0-9]{32}\b|github_pat_|ghp_/);
+  });
+
   test("streams an AI reply through the authenticated route (mock provider)", async ({
     page,
   }) => {

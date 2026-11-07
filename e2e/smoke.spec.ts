@@ -68,7 +68,14 @@ test.describe("access control without a session", () => {
 test.describe("production gate", () => {
   const GATED = "http://127.0.0.1:3101";
 
-  for (const path of ["/dev", "/dev/records", "/dev/storage", "/dev/realtime", "/dev/ai"]) {
+  for (const path of [
+    "/dev",
+    "/dev/records",
+    "/dev/storage",
+    "/dev/realtime",
+    "/dev/ai",
+    "/dev/integrations",
+  ]) {
     test(`${path} is hidden by default in production`, async ({ request }) => {
       const response = await request.get(`${GATED}${path}`);
       expect(response.status()).toBe(404);

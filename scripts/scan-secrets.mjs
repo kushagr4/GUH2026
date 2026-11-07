@@ -12,6 +12,7 @@ export const SECRET_PATTERNS = [
   { name: "JWT (legacy Supabase key or session)", pattern: /\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/ },
   { name: "Anthropic API key", pattern: /\bsk-ant-[A-Za-z0-9_-]{10,}/ },
   { name: "GitHub token", pattern: /\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})/ },
+  { name: "Firecrawl API key", pattern: /\bfc-[a-f0-9]{32}\b/ },
   { name: "AWS access key", pattern: /\bAKIA[0-9A-Z]{16}\b/ },
   { name: "Private key", pattern: /-----BEGIN (?:[A-Z]+ )?PRIVATE KEY-----/ },
   { name: "Database URL with password", pattern: /\bpostgres(?:ql)?:\/\/[^:\s/]+:(?!\[|<|password|your)[^@\s]{3,}@/ },

@@ -19,6 +19,7 @@ const TABS = [
   { label: "Storage", href: "/dev/storage" },
   { label: "Realtime", href: "/dev/realtime" },
   { label: "AI", href: "/dev/ai" },
+  { label: "Integrations", href: "/dev/integrations" },
 ];
 
 export default function DevLayout({ children }: { children: ReactNode }) {

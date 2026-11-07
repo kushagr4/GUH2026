@@ -54,6 +54,8 @@ Everyone, on the venue network:
 npm run doctor
 ```
 
+- During the opening ceremony, fill in the judging checklist in [sponsor-strategy.md](sponsor-strategy.md) and score the decision matrix. Decide on a sponsor by 12:15.
+- Redeem any sponsor credits or codes before 12:00, then turn the sponsor on at `/dev/integrations`.
 - Agree the idea, who owns which feature, and who is presenting.
 - Confirm who the migration owner is.
 

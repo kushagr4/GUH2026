@@ -1,6 +1,7 @@
 import "server-only";
 import { getAiConfig } from "@/lib/ai/config";
 import { readSupabaseEnv } from "@/lib/env";
+import { getIntegrationStatuses } from "@/lib/integrations/status";
 import { getCurrentUser } from "@/lib/supabase/auth";
 import { createClient } from "@/lib/supabase/server";
 
@@ -154,6 +155,19 @@ export async function runDiagnostics(): Promise<DiagnosticCheck[]> {
           detail: ai.mode === "mock" ? "Mock provider (no network, no cost)." : `Key is set. Model: ${ai.model}.`,
         },
   );
+
+  // Environment variables only, so this costs nothing.
+  const integrations = getIntegrationStatuses();
+  const broken = integrations.filter((integration) => integration.state === "invalid");
+  checks.push({
+    name: "Integrations",
+    status: broken.length ? "warn" : "pass",
+    detail: broken.length
+      ? `Needs attention: ${broken.map((integration) => integration.name).join(", ")}. Open the Integrations tab.`
+      : integrations
+          .map((integration) => `${integration.name}: ${integration.state === "ready" ? "ready" : "off"}`)
+          .join(". ") + ".",
+  });
 
   return checks;
 }
