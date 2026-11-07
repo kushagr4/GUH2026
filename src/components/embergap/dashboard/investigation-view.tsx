@@ -31,6 +31,8 @@ import {
   priorityLabel,
   priorityTone,
 } from "./labels";
+import { SCENARIO_PLACE } from "@/lib/embergap/read/regions";
+import { AgentStrip, PartitionTimeline, Provenance } from "./agent-panels";
 import { SafetyNotice } from "./notices";
 import { ToneBadge } from "./tone-badge";
 
@@ -71,7 +73,7 @@ export function InvestigationView({ detail }: { detail: InvestigationDetailRespo
   const { investigation, findings, observations } = detail;
   const now = investigation.isSynthetic ? SYNTHETIC_NOW : detail.generatedAt;
   const scenario = SYNTHETIC_SCENARIOS.find((item) => item.id === investigation.syntheticScenarioId);
-  const title = scenario?.title ?? `Investigation opened ${formatUtc(investigation.openedAt)}`;
+  const title = scenario ? `${scenario.title} · ${SCENARIO_PLACE[scenario.id] ?? "Italy"}` : `Investigation opened ${formatUtc(investigation.openedAt)}`;
 
   const byNewest = [...findings].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const fusion = byNewest.find((finding) => finding.agentId === "fusion" && finding.recommendation);
@@ -98,12 +100,14 @@ export function InvestigationView({ detail }: { detail: InvestigationDetailRespo
         actions={
           <div className="flex flex-wrap gap-2">
             <ToneBadge tone={STATUS_TONE[investigation.status]}>{STATUS_LABEL[investigation.status]}</ToneBadge>
-            {investigation.isSynthetic ? <ToneBadge tone="neutral">Synthetic demo data</ToneBadge> : null}
+            {investigation.isSynthetic ? <ToneBadge tone="neutral">Demo · simulated evidence</ToneBadge> : null}
           </div>
         }
       />
 
       <SafetyNotice />
+
+      <AgentStrip findings={findings} />
 
       <Card className={`border-l-4 ${priorityAccent(recommendation?.reviewPriority ?? investigation.reviewPriority)}`}>
         <CardHeader>
@@ -153,6 +157,8 @@ export function InvestigationView({ detail }: { detail: InvestigationDetailRespo
           )}
         </CardContent>
       </Card>
+
+      <PartitionTimeline events={timeline} />
 
       <section className="flex flex-col gap-3" aria-labelledby="sources-heading">
         <h2 id="sources-heading" className="text-lg font-semibold">
@@ -207,6 +213,7 @@ export function InvestigationView({ detail }: { detail: InvestigationDetailRespo
                   </CardHeader>
                   <CardContent className="flex flex-col gap-2 text-sm">
                     <p>{finding.explanation}</p>
+                    <Provenance finding={finding} observations={observations} />
                     <p className="text-xs text-muted-foreground">
                       Reasons: {finding.reasonCodes.map(humanizeCode).join(", ")}
                     </p>

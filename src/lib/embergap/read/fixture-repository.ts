@@ -31,6 +31,7 @@ import {
 } from "@/lib/embergap/contracts";
 import { bboxContains } from "@/lib/embergap/sources/firms/bbox";
 import { demoFirmsDetections } from "@/lib/embergap/sources/firms/fixtures";
+import { relocateLegacyDetections } from "./demo-detections";
 
 /**
  * SYNTHETIC DEMO DATA, served through Mac's InvestigationReadRepository port.
@@ -146,7 +147,7 @@ const SPECS: Record<SyntheticScenarioId, ScenarioSpec> = {
     reviewPriority: "high",
     reports: [
       {
-        description: "Grey-brown smoke rising from the moor, drifting east. Smell of burning heather.",
+        description: "Grey-brown smoke rising from the macchia scrub on the hillside, drifting east. Smell of burning brush.",
         hasMedia: true,
         labels: ["smoke-like plume", "darker base", "hillside"],
       },
@@ -708,7 +709,7 @@ function buildDetail(scenario: Scenario): InvestigationDetailResponse {
       : [],
   );
 
-  const detections = demoFirmsDetections()
+  const detections = relocateLegacyDetections(demoFirmsDetections())
     .filter((detection) => distanceKm(publicLocation, detection) <= 5)
     .filter((detection) => Date.parse(detection.observedAt) <= Date.parse(SYNTHETIC_NOW));
   const firmsChecked = minutes(opened, 2);

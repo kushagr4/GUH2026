@@ -279,7 +279,7 @@ export const SYNTHETIC_SCENARIOS = [
     groundTruth: "fire",
     investigationId: "00000000-1923-4596-a095-774098c7d58b",
     reportIds: ["00000000-106e-47a9-a6eb-db11ac53887f"],
-    report: { latitude: 53.546, longitude: -1.982, uncertaintyMeters: 500, observedAt: "2026-11-07T09:05:00.000Z" },
+    report: { latitude: 40.12, longitude: 9.02, uncertaintyMeters: 500, observedAt: "2026-11-07T09:05:00.000Z" },
   },
   {
     id: "misleading-photo",
@@ -287,7 +287,7 @@ export const SYNTHETIC_SCENARIOS = [
     groundTruth: "no_fire",
     investigationId: "00000000-09fe-4107-b776-6dd00f9c3170",
     reportIds: ["00000000-147e-4fbf-9e3e-fea1cf9c16c3"],
-    report: { latitude: 53.625, longitude: -2.521, uncertaintyMeters: 1_000, observedAt: "2026-11-07T09:40:00.000Z" },
+    report: { latitude: 43.55, longitude: 11.25, uncertaintyMeters: 1_000, observedAt: "2026-11-07T09:40:00.000Z" },
   },
   {
     id: "missing-satellite-pass",
@@ -295,7 +295,7 @@ export const SYNTHETIC_SCENARIOS = [
     groundTruth: "fire",
     investigationId: "00000000-0b9a-4749-91c0-8a00faa295dd",
     reportIds: ["00000000-0d26-4143-b8e1-aff19fe18752"],
-    report: { latitude: 53.384, longitude: -1.872, uncertaintyMeters: 750, observedAt: "2026-11-07T10:15:00.000Z" },
+    report: { latitude: 39.05, longitude: 16.48, uncertaintyMeters: 750, observedAt: "2026-11-07T10:15:00.000Z" },
   },
   {
     id: "weather-timeout",
@@ -303,7 +303,7 @@ export const SYNTHETIC_SCENARIOS = [
     groundTruth: "fire",
     investigationId: "00000000-0d80-4774-bb4d-26102d4b14fe",
     reportIds: ["00000000-1fc0-4323-a8e3-55314f1a4833"],
-    report: { latitude: 53.602, longitude: -1.931, uncertaintyMeters: 1_500, observedAt: "2026-11-07T10:50:00.000Z" },
+    report: { latitude: 40.65, longitude: 17.97, uncertaintyMeters: 1_500, observedAt: "2026-11-07T10:50:00.000Z" },
   },
   {
     id: "repeated-witness",
@@ -311,7 +311,7 @@ export const SYNTHETIC_SCENARIOS = [
     groundTruth: "fire",
     investigationId: "00000000-1653-4361-8829-3801c69d3012",
     reportIds: ["00000000-0318-4966-86dd-1d30955a62f6", "00000000-040f-47a7-a7ac-7ba099c9d49f"],
-    report: { latitude: 53.913, longitude: -1.832, uncertaintyMeters: 500, observedAt: "2026-11-07T11:20:00.000Z" },
+    report: { latitude: 41.82, longitude: 12.65, uncertaintyMeters: 500, observedAt: "2026-11-07T11:20:00.000Z" },
   },
   {
     id: "partition-recovery",
@@ -319,7 +319,7 @@ export const SYNTHETIC_SCENARIOS = [
     groundTruth: "fire",
     investigationId: "00000000-1146-409b-8d51-0ea14dfbfa8f",
     reportIds: ["00000000-0257-499c-9b8e-9c81906653c9"],
-    report: { latitude: 53.462, longitude: -1.853, uncertaintyMeters: 1_000, observedAt: "2026-11-07T11:45:00.000Z" },
+    report: { latitude: 37.75, longitude: 14.95, uncertaintyMeters: 1_000, observedAt: "2026-11-07T11:45:00.000Z" },
   },
 ] as const;
 

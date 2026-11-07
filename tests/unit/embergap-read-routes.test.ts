@@ -19,7 +19,7 @@ vi.mock("@/lib/embergap/read/repository", () => ({ getReadRepository: async () =
 const { GET: getMap } = await import("@/app/api/embergap/map/route");
 const { GET: getInvestigation } = await import("@/app/api/embergap/investigations/[id]/route");
 
-const PENNINES = "-2.75,53.3,-1.55,54";
+const ITALY = "6.5,35.5,19,47.5"; // Italy, the demonstration area
 const PARTITION = SYNTHETIC_SCENARIOS.find((s) => s.id === "partition-recovery")!;
 const MISSING_PASS = SYNTHETIC_SCENARIOS.find((s) => s.id === "missing-satellite-pass")!;
 
@@ -59,7 +59,7 @@ describe("synthetic fixture repository", () => {
 describe("GET /api/embergap/map", () => {
   it("requires a signed-in user", async () => {
     getCurrentUser.mockResolvedValue(null);
-    const response = await mapRequest(`bbox=${PENNINES}`);
+    const response = await mapRequest(`bbox=${ITALY}`);
     expect(response.status).toBe(401);
     expect(apiErrorResponseSchema.parse(await response.json()).error.code).toBe("unauthorized");
   });
@@ -68,9 +68,9 @@ describe("GET /api/embergap/map", () => {
     ["a bad bbox", "bbox=1,2,3"],
     ["an inverted bbox", "bbox=-1.55,53.3,-2.75,54"],
     ["a huge bbox", "bbox=-60,0,0,20"],
-    ["a zero limit", `bbox=${PENNINES}&limit=0`],
-    ["a huge limit", `bbox=${PENNINES}&limit=5000`],
-    ["a text limit", `bbox=${PENNINES}&limit=lots`],
+    ["a zero limit", `bbox=${ITALY}&limit=0`],
+    ["a huge limit", `bbox=${ITALY}&limit=5000`],
+    ["a text limit", `bbox=${ITALY}&limit=lots`],
   ])("rejects %s with validation_failed", async (_label, query) => {
     const response = await mapRequest(query);
     expect(response.status).toBe(400);
@@ -78,7 +78,7 @@ describe("GET /api/embergap/map", () => {
   });
 
   it("returns a contract-valid synthetic map with no-store", async () => {
-    const response = await mapRequest(`bbox=${PENNINES}`);
+    const response = await mapRequest(`bbox=${ITALY}`);
     expect(response.status).toBe(200);
     expect(response.headers.get("Cache-Control")).toContain("no-store");
     const body = mapResponseSchema.parse(await response.json());
@@ -89,7 +89,7 @@ describe("GET /api/embergap/map", () => {
   });
 
   it("never exposes report text or reporters' chosen points", async () => {
-    const body = mapResponseSchema.parse(await (await mapRequest(`bbox=${PENNINES}`)).json());
+    const body = mapResponseSchema.parse(await (await mapRequest(`bbox=${ITALY}`)).json());
     const text = JSON.stringify(body);
     for (const detail of fixtureDetails().values()) {
       for (const report of detail.reports) expect(text).not.toContain(report.description);
@@ -100,7 +100,7 @@ describe("GET /api/embergap/map", () => {
   });
 
   it("bounds the response with limit and says when it is truncated", async () => {
-    const body = mapResponseSchema.parse(await (await mapRequest(`bbox=${PENNINES}&limit=1`)).json());
+    const body = mapResponseSchema.parse(await (await mapRequest(`bbox=${ITALY}&limit=1`)).json());
     expect(body.features).toHaveLength(1);
     expect(body.truncated).toBe(true);
   });
@@ -111,7 +111,7 @@ describe("GET /api/embergap/map", () => {
       ...fixtureReadRepository,
       listMapInvestigations: async () => ({ ok: false, error: { kind: "unavailable", message: "db down" } }),
     };
-    const response = await mapRequest(`bbox=${PENNINES}`);
+    const response = await mapRequest(`bbox=${ITALY}`);
     expect(response.status).toBe(503);
     expect(JSON.stringify(await response.json())).not.toContain("db down");
   });
