@@ -295,6 +295,29 @@ describe.skipIf(!env)("EmberGap reports, RLS and private photos", () => {
     expect(shared.ok && shared.data.reports).toHaveLength(2);
   });
 
+  it("serves every synthetic scenario's evidence intact, through the contracts", async () => {
+    for (const scenario of SYNTHETIC_SCENARIOS) {
+      const detail = await getInvestigationDetail(bob.client, { userId: bob.id, isReviewer: false }, scenario.investigationId);
+      expect(detail.ok, scenario.id).toBe(true);
+      if (!detail.ok) continue;
+      expect(investigationDetailResponseSchema.safeParse(detail.data).success, scenario.id).toBe(true);
+      expect(detail.data.viewerAccess).toBe("synthetic");
+      // Nothing was dropped by contract parsing: the API shows every stored row.
+      const { count: findings } = await bob.client
+        .from("agent_findings")
+        .select("id", { count: "exact", head: true })
+        .eq("investigation_id", scenario.investigationId);
+      expect(detail.data.findings.length, scenario.id).toBe(findings);
+      const fusion = detail.data.findings.find((finding) => finding.agentId === "fusion");
+      expect(fusion?.recommendation?.recommendedStatus, scenario.id).toBe(detail.data.investigation.status);
+    }
+    const partition = SYNTHETIC_SCENARIOS.find((scenario) => scenario.id === "partition-recovery")!;
+    const timeline = await getInvestigationDetail(bob.client, { userId: bob.id, isReviewer: false }, partition.investigationId);
+    expect(timeline.ok && timeline.data.events.map((event) => event.type)).toEqual(
+      expect.arrayContaining(["partition_started", "message_dropped", "partition_healed", "reconciled"]),
+    );
+  });
+
   describe.skipIf(!env?.secretKey)("with the service role (agent workers)", () => {
     it("appends findings idempotently, enforces the science, and never rewrites them", async () => {
       const admin = createAdmin(env!);
