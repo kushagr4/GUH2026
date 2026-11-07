@@ -11,7 +11,7 @@ symptom is gone.** "It compiles" isn't a fix.
 Write down the exact error, the page or command, the account, and what you
 expected. Then make it happen again yourself:
 
-- **In the app:** run `npm run local:dev` and repeat the steps.
+- **In the app:** run `npm run dev` and repeat the steps.
 - **In a test:** `npx vitest run tests/unit/<file>`, or `npx playwright test e2e/<file>`.
 - **In CI:** `gh run view <run-id> --log-failed`.
 
@@ -19,7 +19,7 @@ If you can't reproduce it, collect more evidence before changing code.
 
 ## 2. Investigate
 
-- **Backend or code?** Open `/dev`, or run `npm run local:status`, which checks every local service and the migrations. If a service fails there, or the hosted project is down or paused (`npm run db:status` shows whether it's reachable), it's not your code.
+- **Backend or code?** Open `/dev`, or run `npm run health`, which checks Auth, the database and Storage on the hosted project. If a service fails there, or the project is paused, it's not your code.
 - Read the failing path end to end: the page, the action, the repository and the policy.
 - Check the browser console, the dev server output, and the Supabase logs.
 - Check recent changes with `git log -p <file>`. If it used to work, use `git bisect`.

@@ -1,8 +1,7 @@
 #!/usr/bin/env node
 // New-machine preflight. Explains what is wrong and how to fix it: npm run doctor
-import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { describeSupabaseEnvProblem, isLocalUrl, loadEnvFiles } from "./lib/env.mjs";
+import { describeSupabaseEnvProblem, loadEnvFiles } from "./lib/env.mjs";
 import { runHealthChecks } from "./lib/health-checks.mjs";
 
 let failed = false;
@@ -27,36 +26,14 @@ const hasEnvFile = existsSync(".env.local");
 report(
   hasEnvFile,
   ".env.local",
-  hasEnvFile ? "found" : "run npm run local:dev, which writes it for local Supabase",
+  hasEnvFile ? "found" : "copy .env.example to .env.local and add the hosted project's URL and publishable key",
 );
 loadEnvFiles(".env.local");
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 const problem = describeSupabaseEnvProblem(url, key);
-const local = !problem && isLocalUrl(url);
-report(
-  !problem,
-  "Supabase settings",
-  problem ?? `${local ? "local" : "hosted"} (${new URL(url).host})`,
-);
-
-// Docker matters unless this checkout is deliberately pointed at the hosted project.
-if (local || problem) {
-  const docker = spawnSync("docker", ["info", "--format", "{{.ServerVersion}}"], {
-    encoding: "utf8",
-    timeout: 20_000,
-  });
-  report(
-    docker.status === 0,
-    "Docker",
-    docker.error?.code === "ENOENT"
-      ? "not installed. Install Docker Desktop (see docs/docker-development.md)"
-      : docker.status === 0
-        ? `engine ${docker.stdout.trim()} running`
-        : "installed but not running. Start Docker Desktop",
-  );
-}
+report(!problem, "Supabase settings", problem ?? `hosted (${new URL(url).host})`);
 
 for (const name of Object.keys(process.env)) {
   if (name.startsWith("NEXT_PUBLIC_") && /SECRET|SERVICE_ROLE|ANTHROPIC/.test(name)) {
@@ -65,14 +42,14 @@ for (const name of Object.keys(process.env)) {
 }
 
 if (!problem) {
-  for (const { name, ok, detail } of await runHealthChecks(url, key, { local })) {
-    report(ok, `${local ? "Local" : "Hosted"} ${name}`, detail);
+  for (const { name, ok, detail } of await runHealthChecks(url, key)) {
+    report(ok, `Hosted ${name}`, detail);
   }
 }
 
 console.log(
   failed
-    ? "\nSome checks failed. See README.md and docs/docker-development.md."
-    : `\nAll good. Run: ${local ? "npm run local:dev" : "npm run dev"}`,
+    ? "\nSome checks failed. See README.md and docs/supabase-cloud-development.md."
+    : "\nAll good. Run: npm run dev",
 );
 if (failed) process.exit(1);

@@ -2,9 +2,9 @@
 
 A reusable foundation for GreatUniHack 2026, now being developed into **EmberGap**, a collaborative wildfire-evidence investigation prototype. The existing starter includes working auth, protected database, private storage, Realtime and AI utilities.
 
-**Stack:** Next.js 16, TypeScript, Tailwind CSS, shadcn/ui, Supabase, Vitest, Playwright.
+**Stack:** Next.js 16, TypeScript, Tailwind CSS, shadcn/ui, hosted Supabase (Auth, Postgres, private Storage, Realtime), Vercel, Vitest, Playwright.
 
-**Every teammate runs their own Supabase locally in Docker.** There are no keys to ask for and no `.env` to fill in.
+**Everyone develops against the team's existing hosted Supabase project.** There is no Docker and no local database: clone, add two public values to `.env.local`, and run `npm run dev`.
 
 ## EmberGap: who builds what
 
@@ -22,7 +22,7 @@ The active GreatUniHack project is **EmberGap**, a multi-agent wildfire-evidence
 
 ## Quick start
 
-You need Git, Node.js 22.12 or newer (24 recommended) and [Docker Desktop](https://docs.docker.com/desktop/). Then:
+You need Git and Node.js 22.12 or newer (24 recommended).
 
 ```bash
 git clone https://github.com/kushagr4/GUH2026.git
@@ -37,19 +37,21 @@ npm ci
 ```
 
 ```bash
-npm run local:dev
+cp .env.example .env.local
 ```
 
-`local:dev` starts Docker Desktop on macOS if it isn't running, starts the Supabase CLI's local stack (or reuses it), applies the migrations, writes the local URL and publishable key into `.env.local`, and runs Next.js. **The first run downloads about 1.3 GB of images**, so give it a few minutes (do it before the event, not on venue Wi-Fi). Later runs take seconds.
+Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` in `.env.local` to the hosted project's values (Supabase Dashboard > Project Settings > API Keys, or ask the migration owner). Then:
 
-Then open <http://localhost:3000>, create an account, and try the service checks at <http://localhost:3000/dev>. Studio, where you can browse tables, users and files, is at <http://127.0.0.1:54323>.
+```bash
+npm run dev
+```
 
-- **Ctrl+C** stops Next.js. `npm run local:stop` stops Supabase too, and **keeps your data**.
-- `npm run local:status` checks Auth, REST and RLS, Storage, Realtime, Studio and migrations.
-- Put sponsor and AI keys (`ANTHROPIC_API_KEY`, `ELEVENLABS_API_KEY` and so on) in `.env.local`, outside the managed Supabase block. Later runs never change them.
-- If your `.env.local` already points at the hosted project, `local:dev` leaves it alone and tells you how to switch.
+Open <http://localhost:3000>, create an account, and try the service checks at <http://localhost:3000/dev>. `npm run doctor` explains anything that's missing.
 
-The full guide, covering stopping without losing data, migrations, tests, troubleshooting and the hosted demo setup, is [docs/docker-development.md](docs/docker-development.md).
+- You share one database with the team, protected by row-level security. Read the rules in [docs/supabase-cloud-development.md](docs/supabase-cloud-development.md) first.
+- Put AI and sponsor keys (`ANTHROPIC_API_KEY`, `NASA_FIRMS_MAP_KEY` and so on) in `.env.local` too. They are server-only.
+- Never put `SUPABASE_SECRET_KEY` in `.env.local` unless you are the migration owner. Agent runs use it on Vercel.
+- Deploying: [docs/deployment.md](docs/deployment.md).
 
 ## What's included
 
@@ -67,33 +69,30 @@ The full guide, covering stopping without losing data, migrations, tests, troubl
 
 | Command | What it does |
 | --- | --- |
-| `npm run local:dev` | Start local Supabase and the app |
-| `npm run local:stop` | Stop local Supabase. Data is kept |
-| `npm run local:status` | Check every local service and the migrations |
-| `npm run local:migrate`, `local:types` | Apply new migrations locally, regenerate database types |
-| `npm run local:test` | Integration and Playwright tests against local Supabase |
-| `npm run dev` | Start only the app, against whatever `.env.local` points at |
-| `npm run doctor` | Check this machine's setup, Docker and the connection to Supabase |
-| `npm run health` | Check that the configured Supabase (local or hosted) is up |
+| `npm run dev` | Start the app against the hosted project in `.env.local` |
+| `npm run build`, `npm run start` | Production build and server, as Vercel runs it |
+| `npm run lint`, `npm run typecheck` | ESLint and TypeScript |
+| `npm run doctor` | Check this machine's setup and the connection to Supabase |
+| `npm run health` | Check that the hosted project is up |
 | `npm run validate` | Workflow lint, ESLint, types, unit tests, migration lint, secret scan, build and bundle scan |
 | `npm run preflight` | Everything CI's PR Checks runs, including the browser smoke tests, with a summary |
 | `npm test` | Unit tests, fully mocked, no network |
 | `npm run db:new -- <name>` | Create a migration from the secure template |
 | `npm run db:lint` | Check migrations for security and safety problems |
 
-Only the migration owner needs `db:status`, `db:plan`, `db:push`, `db:types`, `db:audit`, `db:sweep-tests`, `env:share` and `env:test`, which act on the hosted project. `npm run local:test` runs the integration tests and the signed-in Playwright journey against your local stack. To run them against the hosted project instead, create `.env.test.local`, as described in [docs/supabase-setup.md](docs/supabase-setup.md).
+Only the migration owner needs `db:status`, `db:plan`, `db:push`, `db:types`, `db:audit`, `db:sweep-tests`, `env:share` and `env:test`, which act on the hosted project. The integration tests and the signed-in Playwright journey run against the hosted project with disposable users, and only when `.env.test.local` exists ([docs/supabase-cloud-development.md](docs/supabase-cloud-development.md#tests)).
 
 Running `npm run test:e2e` needs a browser the first time: `npx playwright install chromium`.
 
 ## Working as a team
 
 - **Changing the app?** Use a `feat/`, `fix/` or `chore/` branch, and open a normal pull request. No Claude self-review or human approval is required. Keep automated **PR Checks** and let the human owner merge. See [docs/development-workflow.md](docs/development-workflow.md). Your dev server, local database and `.env.local` are yours alone, so your work never affects anyone else until it is merged.
-- **Changing the database?** Write a migration, try it with `npm run local:migrate`, and include it in your PR. Teammates get it on their next `local:dev` after pulling. Only the migration owner applies it to the hosted project. See [docs/team-workflow.md](docs/team-workflow.md).
-- **Never reset the hosted database.** The demo's data lives there. A local reset only touches your own laptop, and still asks you to confirm.
+- **Changing the database?** Write a migration (`npm run db:new`), check it with `npm run db:lint`, and include it in your PR. Only the migration owner applies it to the hosted project. See [docs/team-workflow.md](docs/team-workflow.md).
+- **Never reset or wipe the hosted database.** Everyone's data and the demo live there.
 
 ## More documentation
 
-- [docs/docker-development.md](docs/docker-development.md): local Supabase in Docker, step by step, with troubleshooting
+- [docs/supabase-cloud-development.md](docs/supabase-cloud-development.md): developing against the hosted project safely, migrations, tests and agents
 - [docs/hackathon-day.md](docs/hackathon-day.md): the plan and commands for the day
 - [docs/sponsor-strategy.md](docs/sponsor-strategy.md): judging checklist, sponsor decision matrix and three project concepts
 - [docs/sponsor-comparison.md](docs/sponsor-comparison.md): ElevenLabs, n8n, Firecrawl, Lovable and GitHub compared, with free-tier limits
@@ -114,11 +113,10 @@ Running `npm run test:e2e` needs a browser the first time: `npx playwright insta
 
 | Symptom | Fix |
 | --- | --- |
-| "Docker was not found" or "is not running" | Install or open Docker Desktop. See [docs/docker-development.md](docs/docker-development.md#troubleshooting) |
-| "These ports are already in use" | Another local Supabase project is running. The message says how to stop it |
-| "Supabase is not connected yet" | `.env.local` is missing or still has placeholders. Run `npm run local:dev` |
-| `npm run health` can't reach Supabase | `npm run local:up`, then `npm run local:status` |
+| "Supabase is not connected yet" | `.env.local` is missing or still has placeholders. Set the hosted URL and publishable key |
+| `.env.local` "still points at the old local Docker stack" | Replace the `127.0.0.1` values with the hosted project's |
+| `npm run health` can't reach Supabase | The free project may be paused. The owner restores it in the dashboard |
 | "Too many attempts from this network" | Auth allows 30 sign-ins and sign-ups per 5 minutes per IP, and a venue may share one IP. Wait a few minutes, or use a demo account |
 | "Email address not authorized" or an email rate limit error | "Confirm email" is on. The owner turns it off ([docs/supabase-setup.md](docs/supabase-setup.md)) |
-| A table "is missing" | Locally: `npm run local:migrate`. Hosted: ask the migration owner to run `npm run db:push` |
+| A table "is missing" | The migration isn't applied yet: ask the migration owner to run `npm run db:push` |
 | Port 3000 is busy | `npm run dev -- -p 3001` |

@@ -268,7 +268,8 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
     read: Reader<T>,
   ): Promise<T> {
     const method = request.method ?? "GET";
-    const label = `${method} ${request.path.split("?")[0]}`;
+    // Scrubbed, because some APIs (NASA FIRMS) put the key in the path itself.
+    const label = scrub(`${method} ${request.path.split("?")[0]}`);
     const url = buildUrl(request.path, request.query);
     const retry = request.retry ?? method === "GET";
 

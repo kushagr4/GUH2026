@@ -8,7 +8,7 @@ The team has deliberately removed mandatory **Claude review**, **human PR approv
 
 Run `npm run preflight` before handoff if practical. You may open a normal PR as soon as focused local tests pass; CI can run while you work on another independent task. If CI fails, fix the concrete defect. Never turn off RLS, secrets or hosted database safety rules to get green.
 
-Hosted integration and E2E tests remain opt-in and off the PR workflow because they target the shared free-plan Supabase project. Use `npm run local:test` for relevant database changes.
+Hosted integration and E2E tests remain opt-in and off the PR workflow because they target the shared free-plan Supabase project. They use disposable users; run them deliberately, with `.env.test.local`, for relevant database changes.
 
 ## No review gate
 

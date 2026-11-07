@@ -5,34 +5,49 @@ This document describes the existing GUH2026 infrastructure first and the planne
 ## Overview
 
 ```
- Each developer laptop                               Supabase Cloud (free plan)
-┌──────────────────────────────────────────┐        ┌──────────────────────────┐
-│ npm run local:dev                        │        │ Hosted project, for the  │
-│  Next.js (localhost:3000)                │        │ deployed demo only       │
-│   ├─ browser client ─┐ publishable key   │        │  Auth, Postgres (RLS),   │
-│   ├─ server client ──┤ + user session    │        │  Storage, Realtime       │
-│   └─ proxy.ts        ▼                   │        └────────────▲─────────────┘
-│  Supabase CLI stack in Docker            │                     │
-│   (127.0.0.1:54321) Auth, Postgres (RLS),│   Migration owner,  │
-│   Storage, Realtime, REST, Studio        │   from main only:   │
-│   built from supabase/migrations/        │   npm run db:push ──┘
-└──────────────────────────────────────────┘
+ Developer laptops (npm run dev)          Vercel (production and previews)
+┌──────────────────────────────┐        ┌──────────────────────────────────┐
+│ Next.js on localhost:3000    │        │ Next.js: pages, Route Handlers,  │
+│  browser + server clients    │        │ Server Actions (Node.js runtime) │
+│  publishable key + session   │        │  + server-only keys: Anthropic,  │
+└──────────────┬───────────────┘        │    FIRMS, SUPABASE_SECRET_KEY    │
+               │                        └────────────────┬─────────────────┘
+               ▼                                         ▼
+        ┌────────────────────────────────────────────────────────┐
+        │ Supabase Cloud: the team's one hosted free-plan project │
+        │  Auth, Postgres with RLS, private Storage, Realtime     │
+        │  Schema only from supabase/migrations/ via the          │
+        │  migration owner's npm run db:push                       │
+        └────────────────────────────────────────────────────────┘
 ```
 
-Every developer runs their own Next.js server and their own Supabase, so neither frontend work nor data can disturb anyone else. Migrations in Git are the shared truth: they build every local database, and the owner applies them to the hosted project, as described in [team-workflow.md](team-workflow.md).
+Everyone runs their own Next.js server against the same hosted project. Row-level security keeps each user's data private, so teammates never see or change each other's rows. Migrations in Git are the only source of schema truth, and only the migration owner applies them ([team-workflow.md](team-workflow.md), [supabase-cloud-development.md](supabase-cloud-development.md)).
 
 ## Why these decisions
 
 | Decision | Reason |
 | --- | --- |
-| Local Supabase per developer, via the CLI's own Docker stack | No shared keys to hand out, no rate limits or shared data to trip over, and one command to set up. No Compose file to maintain |
-| One hosted project on the free plan, for the demo | The team's budget. Only the migration owner changes it |
-| CLI `db push` for migrations, MCP read-only | One write path keeps the migration history correct |
+| One hosted Supabase project for development, demo and deployment | No Docker to install or keep running, and everyone sees the same schema and synthetic demo data. RLS keeps users' data apart |
+| Vercel for hosting | Zero-config Next.js deploys and preview URLs, with server-only keys in project settings |
+| CLI `db push` by one owner, MCP read-only | One write path keeps the migration history correct |
 | Next.js proxy protects all of `/app/*` | New pages are secure by default, with no list to maintain |
 | Password auth, with "Confirm email" off | The built-in mailer is too restricted to rely on in a demo |
-| Profiles created on first save | Avoids a trigger on `auth.users`, so no `SECURITY DEFINER` is needed |
+| Profiles created on first save | Avoids a trigger on `auth.users` |
 | Browser uploads straight to Storage | Bucket RLS and limits apply, and no file passes through the server |
+| Agent runs are short, request-scoped and persisted | Vercel functions have no long-lived processes (see [Agent runtime on Vercel](#agent-runtime-on-vercel)) |
 | System fonts | No network dependency at build time on venue Wi-Fi |
+
+## Agent runtime on Vercel
+
+Vercel functions are short-lived: there are no permanently running Node.js workers, no timers that outlive a request, and no in-memory message bus shared between requests. EmberGap's agents therefore work like this:
+
+1. **A report starts a run.** `POST /api/embergap/reports` creates the report. A database trigger opens the investigation and records `report_submitted`. The route then calls `scheduleInvestigation()` (`src/features/embergap/orchestrator.ts`), which uses Next.js `after()` to start the run after the response is sent. The route's `maxDuration` is 60 s and a run's budget is 45 s.
+2. **Supabase is the durable state.** A run records each agent's queued task (`task_queued`), each agent's own attributed finding, `finding_recorded` events and the automated status, through the idempotent `EmberGapRuntimeStore` (`src/features/embergap/runtime.ts`). The investigation view shows progress from these rows, live through Realtime.
+3. **Agents stay independent.** Each agent produces its own finding from its own inputs: witness, vision, satellite (FIRMS), weather (Open-Meteo), EONET context, then fusion. Agents never edit each other's findings, and the scientific rules are enforced by the contracts and by database checks.
+4. **Retries are safe.** IDs and idempotency keys are derived from the investigation and step, so a retried or repeated run writes nothing twice.
+5. **Partitions, delays and reconciliation are a deterministic simulation** inside a run (Claude PC's runtime): message loss, duplication, reordering and recovery are modelled with a simulated clock and recorded as `partition_*`, `message_*` and `reconciled` events. This is honest decision-support demo infrastructure, not a deployed network of permanent independent workers, and must not be described as one.
+6. **Plugging in the runtime.** Claude PC's runtime implements `InvestigationRunner` and is passed to `scheduleInvestigation()`/`runInvestigation()`. Until then, the default runner queues a task per agent, runs Danil's validation pipeline (witness and fusion), and records satellite, weather and vision as **gaps**, never as invented observations. Live vision needs Danil's Claude analyzer.
+7. **Keys.** Runs need `SUPABASE_SECRET_KEY` (server-only) because workers have no user session. Without it, reports still work, nothing runs, and the investigation stays `unreviewed`.
 
 ## Request flow
 
@@ -263,7 +278,7 @@ Before coding adapters, verify current API endpoints, auth, rate limits and resp
 - AI image interpretation is only supporting evidence; deterministic checks and human review determine how evidence is presented. Never silently convert model guesses into facts.
 - Do not infer a precise location from an image or display a reporter's exact coordinates publicly.
 - All secrets stay server-side. Respect the existing `CLAUDE.md` prohibitions on hosted resets, remote credentials, merging and direct `main` pushes.
-- Local development: `npm ci && npm run local:dev`; each developer runs their own Docker-backed local Supabase. Only the migration owner deploys to hosted after the relevant migrations are integrated and checked.
+- Development: `npm ci`, the hosted project's public values in `.env.local`, then `npm run dev` (no Docker). Only the migration owner applies migrations to the hosted project, after they are merged and checked.
 - The default demo must work **fully offline from third-party AI/data APIs** through clearly labelled synthetic fixtures. Make live mode opt-in with honest failures, rather than fabricating API responses.
 
 ## Minimal user-testing scope
@@ -275,6 +290,6 @@ Do **one short internal walkthrough** with 1-2 available teammates, coordinated 
 - Unit tests: light-curve is not relevant; test observation normalization, duplicate detection, task arbitration, bad/stale/missing sources, agent state, partition recovery and merge idempotency.
 - Integration: scoped report visibility, private uploads, agent findings access controls, new table grants/RLS and migration correctness on local Supabase.
 - E2E: a handful of focused browser checks: report form validation, map/evidence read path, a basic partition demo and one mobile viewport. Avoid extensive manual user research.
-- Existing commands: `npm run preflight`, `npm run validate`, `npm run local:status`, `npm run local:test`. Run targeted tests first; note anything skipped. Minimal **manual user testing** does not mean skipping CI, RLS/security tests, agent reconciliation tests or existing smoke checks.
+- Existing commands: `npm run preflight`, `npm run validate`, `npm run health`, and the hosted integration and E2E tests when `.env.test.local` is configured. Run targeted tests first; note anything skipped. Minimal **manual user testing** does not mean skipping CI, RLS/security tests, agent reconciliation tests or existing smoke checks.
 - PR order: **contracts and migrations -> parallel Outrolife FIRMS+GET+map, PC weather+runtime, Danil validation, d3vmakes reporting UI PRs -> Mac integration PR -> demo hardening**. Avoid cherry-picking incomplete work across branches.
 - No mandatory Claude self-review or teammate PR approval in hackathon fast-build mode. Keep focused automated tests and CI. Claude Code sessions never approve, merge or push to `main`; the human owner merges. The `/feature-dev` and `/bugfix` workflows remain available without review gates.

@@ -30,7 +30,7 @@ This compares the migration files with the hosted project's history, so it also 
 
 - Sign in to the Supabase dashboard, and confirm the project is active. Free projects pause after a week without activity.
 - Create one demo account per teammate through `/signup`, and record them somewhere private.
-- Add teammates' GitHub accounts to the repo. They don't need any Supabase values: each runs local Supabase. The hosted URL and publishable key go only into Vercel.
+- Add teammates' GitHub accounts to the repo, and send them the hosted project's URL and publishable key (`npm run env:share`). Never send the secret key: it goes only into Vercel.
 
 Everyone:
 
@@ -43,14 +43,10 @@ npm ci
 ```
 
 ```bash
-npm run local:up
+npm run doctor
 ```
 
-```bash
-npm run local:status
-```
-
-`local:up` downloads about 1.3 GB of Docker images the first time, so do it at home, not on venue Wi-Fi. Also run `npx playwright install chromium` while you're on good Wi-Fi if you'll run E2E tests.
+`doctor` checks Node, the dependencies, `.env.local` and the hosted project. Also run `npx playwright install chromium` while you're on good Wi-Fi if you'll run E2E tests.
 
 ## 10:30 to 12:00: at the venue
 
@@ -127,7 +123,7 @@ Commands you'll use most:
 
 | Situation | Command |
 | --- | --- |
-| Is it the backend or my code? | Open `/dev`, or run `npm run local:status` |
+| Is it the backend or my code? | Open `/dev`, or run `npm run health` |
 | Before a final integration or demo handoff | `npm run preflight` (or report CI and any unavailable steps) |
 | New table or column | `npm run db:new -- <name>` |
 | Migration status (owner) | `npm run db:status` |

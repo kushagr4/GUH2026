@@ -6,16 +6,15 @@ A reusable Next.js and Supabase foundation for GreatUniHack 2026. It retains the
 
 ## Non-negotiable constraints
 
-- **Local development runs on the Supabase CLI's own Docker stack.** `npm run local:dev` starts it, applies migrations, writes `.env.local` and runs Next.js. Don't add a separate Docker Compose stack for Supabase.
-- **Each teammate has an independent local database.** The hosted free-plan project is only for deployments and shared demos. Never enable paid services, add-ons or database branching, and never create billable resources.
-- **Never reset the hosted database or delete teammates' data.** Hosted migrations are additive. A local reset (`npm run local:reset -- --yes-delete-local-data`) wipes only the caller's own local data, so ask the user before running it.
+- **Everyone develops against the team's existing hosted Supabase project**, and the app deploys to Vercel. There is no Docker, no local Supabase stack and no local database: don't add one back. Never create another Supabase project, enable paid services, add-ons or database branching, or create billable resources.
+- **The database is shared, so never reset it, wipe it, or delete or change another teammate's data.** Migrations are additive. RLS keeps each user's rows private; use disposable accounts for experiments.
 - **Only the designated migration owner deploys hosted migrations** (`supabase/MIGRATION_OWNER`). Everyone else opens a PR containing the migration file.
 - **All schema changes go through version-controlled files** in `supabase/migrations/`. Never change the schema through Studio, the dashboard or MCP without a matching migration file.
-- **Keep local and hosted commands apart.** `local:*` scripts are local only and never pass `--remote`. `db:status`, `db:plan`, `db:push`, `db:types`, `db:audit` and `db:sweep-tests` are hosted, owner-only operations. Don't call the CLI directly with `--remote`.
+- **`db:status`, `db:plan`, `db:push`, `db:types`, `db:audit` and `db:sweep-tests` are hosted, owner-only operations.** Don't call the Supabase CLI directly with `--remote`.
 
-## Local development
+## Development
 
-Read `docs/docker-development.md`. With Docker Desktop running, `npm ci && npm run local:dev` is the whole setup, and it is safe to rerun. `npm run local:stop` keeps data. `npm run local:status` checks every service. The CLI's `start` and `status` output contains privileged local keys, so never print or log it: use the `local:*` scripts, which capture it. `.env.local` has a managed Supabase block. Keep sponsor and AI keys outside it.
+Read `docs/supabase-cloud-development.md`. Setup is `npm ci`, then copy `.env.example` to `.env.local` with the hosted project's URL and publishable key, then `npm run dev`. `npm run doctor` checks it. `SUPABASE_SECRET_KEY` lives only in Vercel and on the migration owner's machine; never ask a teammate for it or add it to `.env.local` to work around RLS. Deployment: `docs/deployment.md`.
 
 ## Architecture
 
@@ -44,13 +43,13 @@ scripts/            Node scripts, no shell-specific syntax. Only check-workflows
 .github/            CI (ci.yml, one "PR Checks" job), PR template, CODEOWNERS
 .claude/            Skills (feature-dev, bugfix), optional helpers, git guard hook
 tests/unit/         Mocked, no network. Runs everywhere
-tests/integration/  Real Supabase (local via local:test, or hosted), disposable users
+tests/integration/  The hosted project, only with .env.test.local, disposable users
 e2e/                Playwright. smoke needs no backend, the signed-in journey needs SUPABASE_TEST_*
 ```
 
 ## Adding a feature
 
-1. If it needs data: `npm run db:new -- add_things`, fill in the template, then `npm run local:migrate` and `npm run local:types`. It needs explicit grants, RLS and policies in the same file. New public tables get no Data API access without explicit `GRANT`s.
+1. If it needs data: `npm run db:new -- add_things`, fill in the template and run `npm run db:lint`. It needs explicit grants, RLS and policies in the same file. New public tables get no Data API access without explicit `GRANT`s. The migration owner applies it after merge (`npm run db:push`, then `npm run db:types -- --check`).
 2. Pages go in `src/app/app/<feature>/`, and are protected automatically.
 3. Create `src/features/<feature>/` with `repository.ts`, `actions.ts` and `components/`. Copy `src/features/account/` as the reference.
 4. Use `getCurrentUser()` or `requireUser()` from `@/lib/supabase/auth`, and `createClient()` from `@/lib/supabase/server`.
@@ -103,12 +102,7 @@ e2e/                Playwright. smoke needs no backend, the signed-in journey ne
 | `db:new`, `db:lint` | Create and check migrations (anyone) |
 | `db:status`, `db:plan`, `db:push`, `db:types`, `db:audit`, `db:sweep-tests`, `env:share`, `env:test` | Hosted operations (migration owner) |
 | `secrets:scan`, `check:bundle` | Credential scan of files and history; scan of the built client bundle |
-| `local:dev`, `local:up`, `local:stop`, `local:status` | Run, stop and check the local Docker stack. Stopping keeps data |
-| `local:env`, `local:migrate`, `local:types` | Rewrite the `.env.local` Supabase block, apply new migrations locally, regenerate types locally |
-| `local:test` | Integration and Playwright tests against the local stack |
-| `local:reset` | Rebuild the local database. Deletes local data. Needs `-- --yes-delete-local-data` and the user's approval |
-
-Supabase CLI v3 targets the local stack by default, and hosted commands need `--remote`. The `local:*` and `db:*` scripts handle this. Prefer them over calling the CLI directly.
+The `db:*` scripts pass `--remote` for you and check that you are the migration owner. Prefer them over calling the Supabase CLI directly.
 
 ## Workflow: branches, PRs and reviews
 
@@ -175,7 +169,8 @@ The **five independent work sessions** are Claude on Mac, Claude on PC, **Danil*
 - **Data security:** reports can contain sensitive locations and photos. Reporter-owned RLS, private media, server-side API keys, approximate public locations, input validation, abuse protections and audit trails are required. A reporter cannot assert trusted reviewer status or write another agent's findings.
 - **Scientific responsibility:** absence of satellite data is **unknown**, not evidence of absence. Weather alone cannot confirm fire; Claude vision cannot authenticate photographs. Never assert model confidence as calibrated probability unless measured and calibrated. No unreviewed user report becomes a verified incident.
 - **Demo discipline:** deterministic synthetic fixtures and mocked AI are required for an end-to-end offline demonstration. Live NASA/weather and Anthropic are optional enrichment. No live API calls in unit/CI tests.
-- **Development environment:** Node 22.12+ and Docker Desktop; `npm run local:dev`, `npm run local:status`, `npm run local:test`, `npm run preflight`. On Windows use a supported WSL2/Docker Desktop setup; do not assume POSIX-only shell commands in cross-platform scripts.
+- **Development environment:** Node 22.12+ and the hosted Supabase project; `npm run dev`, `npm run doctor`, `npm run preflight`. No Docker. Do not assume POSIX-only shell commands in cross-platform scripts.
+- **Vercel runtime:** no long-lived workers, timers or in-memory message buses between requests. Agent runs start with `scheduleInvestigation()` (`after()`, bounded by `maxDuration`), persist through `EmberGapRuntimeStore`, and stay idempotent. Partitions and delays are a deterministic simulation within a run; never claim permanent independent workers.
 - **External APIs:** reuse `src/lib/integrations/createApiClient` patterns and `src/lib/ai`; do not bypass existing rate limits, security checks or the hosted migration owner. Verify current external API contracts rather than guessing.
 
 ### Minimum per-workstream handoff

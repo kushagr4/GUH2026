@@ -10,6 +10,9 @@ vi.mock("@/lib/supabase/server", () => ({ createClient }));
 const submitReport = vi.fn();
 vi.mock("@/features/embergap/submit", () => ({ submitReport }));
 
+const scheduleInvestigation = vi.fn(() => true);
+vi.mock("@/features/embergap/orchestrator", () => ({ scheduleInvestigation }));
+
 const { POST } = await import("@/app/api/embergap/reports/route");
 
 const REPORT_ID = "00000000-0000-4000-8000-000000000001";
@@ -80,6 +83,7 @@ describe("POST /api/embergap/reports", () => {
     const json = reportSubmissionResponseSchema.parse(await response.json());
     expect(json).toMatchObject({ reportId: REPORT_ID, investigationStatus: "unreviewed", verification: "unverified", replayed: false });
     expect(submitReport).toHaveBeenCalledWith({ fake: "client" }, userId, expect.objectContaining({ description: body.description, media: null }));
+    expect(scheduleInvestigation).toHaveBeenCalledWith(INVESTIGATION_ID);
   });
 
   it("returns 200 for a replayed clientRequestId", async () => {
@@ -87,6 +91,7 @@ describe("POST /api/embergap/reports", () => {
     const response = await post(goodBody());
     expect(response.status).toBe(200);
     expect((await response.json()).replayed).toBe(true);
+    expect(scheduleInvestigation).not.toHaveBeenCalled();
   });
 
   it("rejects a body that isn't JSON", async () => {

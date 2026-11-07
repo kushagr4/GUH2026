@@ -1,8 +1,8 @@
 # Hosted Supabase setup (migration owner)
 
-Teammates don't need any of this. They develop against their own local Supabase ([docker-development.md](docker-development.md)). The hosted project is for the deployed demo.
+Teammates don't need any of this: they only need the project's URL and publishable key ([supabase-cloud-development.md](supabase-cloud-development.md)). This page is for the migration owner, who configures the one hosted project that everyone develops against and Vercel deploys to.
 
-Nothing on this page needs Docker. Supabase CLI v3 targets the local stack by default, so hosted commands need `--remote`. The `npm run db:*` scripts add it for you, and the `npm run local:*` scripts never do.
+Nothing on this page needs Docker. Supabase CLI v3 commands target a local stack unless given `--remote`; the `npm run db:*` scripts add it for you, so prefer them.
 
 ## 1. Create the project (free plan)
 

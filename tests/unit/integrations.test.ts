@@ -189,6 +189,19 @@ describe("createApiClient", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  it("never logs a key that an API puts in the path (NASA FIRMS does)", async () => {
+    const key = "0123456789abcdef0123456789abcdef";
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { fetch } = fakeFetch(new Response("upstream down", { status: 503 }));
+    const failed = await caught(
+      client(fetch, { secrets: [key], retries: 0 }).request({ path: `/api/area/csv/${key}/VIIRS_SNPP_NRT/-3,53,-2,54/1`, schema: ok }),
+    );
+    expect(failed.message).not.toContain(key);
+    expect(warn).toHaveBeenCalled();
+    for (const call of warn.mock.calls) expect(String(call[0])).not.toContain(key);
+    warn.mockRestore();
+  });
+
   it("reports responses that aren't JSON or don't match the schema", async () => {
     const { fetch } = fakeFetch(new Response("<html>"), json({ ok: "yes" }));
     expect((await caught(client(fetch).request({ path: "/a", schema: ok }))).kind).toBe("invalid_response");

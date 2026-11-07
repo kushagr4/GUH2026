@@ -722,7 +722,9 @@ export const fusionRecommendationSchema = z.object({
   reviewPriority: reviewPrioritySchema,
   /** How many independent source types directly support the report. A count, not a probability. */
   independentSourceCount: z.number().int().min(0).default(0),
+  /** The findings behind independentSourceCount: assessment "supports" only. Never context, weak or inconclusive findings. */
   supportingFindingIds: z.array(idSchema).max(100),
+  /** Findings with assessment "contradicts" only. Gaps and non-detections never appear here. */
   contradictingFindingIds: z.array(idSchema).max(100),
   /** Plain-language gaps, for example "No FIRMS pass since 09:00 UTC". */
   evidenceGaps: z.array(z.string().trim().min(1).max(300)).max(20),

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Lightweight check of the configured project, local or hosted: npm run health
-import { describeSupabaseEnvProblem, isLocalUrl, loadEnvFiles } from "./lib/env.mjs";
+// Lightweight check of the hosted Supabase project in .env.local: npm run health
+import { describeSupabaseEnvProblem, loadEnvFiles } from "./lib/env.mjs";
 import { runHealthChecks } from "./lib/health-checks.mjs";
 
 loadEnvFiles(".env.local");
@@ -14,16 +14,11 @@ if (problem) {
   process.exit(1);
 }
 
-const local = isLocalUrl(url);
-console.log(`Checking ${local ? "local" : "hosted"} Supabase at ${new URL(url).host}`);
-const results = await runHealthChecks(url, key, { local });
+console.log(`Checking Supabase at ${new URL(url).host}`);
+const results = await runHealthChecks(url, key);
 for (const { name, ok, detail } of results) {
   console.log(`${ok ? "PASS" : "FAIL"}  ${name}: ${detail}`);
 }
-console.log(
-  local
-    ? "For Realtime, Studio and migrations too, run npm run local:status."
-    : "Realtime is checked in the browser at /dev/realtime.",
-);
+console.log("Realtime is checked in the browser at /dev/realtime.");
 
 if (results.some((result) => !result.ok)) process.exit(1);
