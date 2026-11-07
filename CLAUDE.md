@@ -41,8 +41,8 @@ src/lib/
   rate-limit.ts     In-memory limiter shared by AI and integrations
 supabase/migrations/  The only source of schema truth
 scripts/            Node scripts, no shell-specific syntax. Only check-workflows.mjs uses a package (yaml)
-.github/            CI (ci.yml, one "PR Checks" job), review status, PR template, CODEOWNERS
-.claude/            Skills (feature-dev, bugfix, self-review), helper agents, git guard hook
+.github/            CI (ci.yml, one "PR Checks" job), PR template, CODEOWNERS
+.claude/            Skills (feature-dev, bugfix), optional helpers, git guard hook
 tests/unit/         Mocked, no network. Runs everywhere
 tests/integration/  Real Supabase (local via local:test, or hosted), disposable users
 e2e/                Playwright. smoke needs no backend, the signed-in journey needs SUPABASE_TEST_*
@@ -112,15 +112,15 @@ Supabase CLI v3 targets the local stack by default, and hosted commands need `--
 
 ## Workflow: branches, PRs and reviews
 
-Every change reaches `main` through a focused PR with green **PR Checks** and one approval from someone other than its author. Details: `docs/development-workflow.md` and `docs/ci-and-reviews.md`.
+Every change reaches `main` through a focused PR with automated **PR Checks**, without mandatory Claude or teammate review. Details: `docs/development-workflow.md` and `docs/ci-and-reviews.md`.
 
 - **Building or changing behaviour?** Follow `/feature-dev` (`.claude/skills/feature-dev/SKILL.md`) before writing code. **Fixing a bug?** Follow `/bugfix`. Scale both to the change: a trivial edit needs no helper agents.
 - **Branches:** `feat/<issue>-<name>`, `fix/<issue>-<name>`, `refactor/<issue>-<name>` or `chore/<name>`, from an up-to-date `main`. GitHub Issues are the tickets; drop the number when there's none. Never work on `main`.
 - **Commits and PR titles** are Conventional Commits: `type(scope): lowercase description`, with no full stop. CI fails on a bad PR title, because it becomes the squash commit.
-- **Draft first.** Open PRs with `gh pr create --draft`. Before `gh pr ready`: tests written, `npm run preflight` passing, and `/self-review` clean of Critical and Important findings. Then request one human reviewer with `gh pr edit --add-reviewer <login>`.
-- **Never merge, never approve, never push to `main`.** That's a person's job. `.claude/hooks/git-guard.mjs` denies `gh pr merge`, approvals, pushes to `main`, and `gh pr ready` before `/self-review` has passed for exactly the branch's diff. Never use `SKIP_GIT_GUARD=1` unless the user asks. After touching a hook, run `npx vitest run tests/unit/git-guard.test.ts`.
-- **GitHub can't enforce the review rule** on this private repo's plan. The "Human review" status is advisory. Never claim reviews are enforced.
-- `/self-review` is Claude's own review. It never replaces the human approval.
+- **Hackathon fast-build:** use normal PRs, not draft PRs. Run focused tests and push early. No `/self-review`, `/code-review`, reviewer agents, review markers or requested human approvals. Keep CI, secrets checks and RLS protections.
+- **Claude never merges, approves or pushes to `main`.** `.claude/hooks/git-guard.mjs` protects human-controlled merges and main. It no longer blocks `gh pr ready` or `gh pr create` pending review. Never bypass the remaining guard. Run `npx vitest run tests/unit/git-guard.test.ts` after changing it.
+- **No review status gate:** the advisory Human review status workflow has been retired; it must not be used as a merge condition.
+- Do not initiate review passes unless the user explicitly requests one. Fix concrete test, security or runtime failures when encountered.
 
 ## MCP
 
@@ -129,7 +129,7 @@ Every change reaches `main` through a focused PR with green **PR Checks** and on
 ## Hackathon-day practices
 
 - Hacking is short (see `docs/hackathon-day.md`). Keep PRs small and merge often. Keep `main` demoable at all times.
-- Run `npm run preflight` before marking a PR ready.
+- Run focused checks early; run `npm run preflight` before demo integration where possible, then inspect CI.
 - Schema changes are additive. Don't rename or drop a column a teammate might be using.
 - Keep the `/dev` pages until the end. They are the fastest way to tell whether a problem is in the infrastructure or in your feature.
 - Before any commit of secrets-adjacent work, run `npm run secrets:scan`.
@@ -140,7 +140,7 @@ Every change reaches `main` through a focused PR with green **PR Checks** and on
 
 ## EmberGap implementation brief (active project, November 2026)
 
-**The active application is EmberGap.** Treat the shared starter architecture, security guidance, scripts and review gates above as binding. For the actual product design, data flow, acceptance criteria and planned code boundaries, read **`docs/architecture.md#embergap-product-architecture-greatunihack-2026`** before implementing any EmberGap feature. Do not infer that the planned modules or schema already exist.
+**The active application is EmberGap.** Treat the shared starter architecture, security guidance, scripts and fast-build workflow above as binding. For the actual product design, data flow, acceptance criteria and planned code boundaries, read **`docs/architecture.md#embergap-product-architecture-greatunihack-2026`** before implementing any EmberGap feature. Do not infer that the planned modules or schema already exist.
 
 ### Definition of success
 
@@ -160,17 +160,17 @@ The **five independent work sessions** are Claude on Mac, Claude on PC, **Danil*
 
 **API ownership is exclusive.** Mac owns writing/posting reports and database contracts; Outrolife owns the read-only map and investigation APIs and FIRMS integration; PC owns weather and EONET, not FIRMS; Danil owns validation, not API routes. No parallel edits to the same route or shared contract.
 
-**Start in parallel:** Mac publishes the shared contracts PR ASAP. Meanwhile Outrolife builds FIRMS fixtures plus GET endpoints/map using deterministic mock data, d3vmakes builds the report form against a mock response, Danil builds pure validation/fusion functions on fixtures, PC builds weather/EONET adapters and worker runtime. After contract review, change imports to canonical types. Mac owns final repo integration and any shared navigation changes; don't handwave cross-branch contract differences.
+**Start in parallel:** Mac publishes the shared contracts PR ASAP. Meanwhile Outrolife builds FIRMS fixtures plus GET endpoints/map using deterministic mock data, d3vmakes builds the report form against a mock response, Danil builds pure validation/fusion functions on fixtures, PC builds weather/EONET adapters and worker runtime. After the contracts PR merges, change imports to canonical types. Mac owns final repo integration and any shared navigation changes; don't handwave cross-branch contract differences.
 
 **Minimum manual user testing:** one 10-15 minute internal demo walkthrough with 1-2 teammates, coordinated by d3vmakes. No user studies or surveys. This does **not** relax automated unit, security/RLS, partition/reconciliation, CI, preflight or essential end-to-end tests.
 
-**Merge sequence:** contracts/migrations first, then PRs with independent data/runtime/validation/UI slices, then Mac integration and demo hardening. Each PR needs self-review, relevant checks and one separate human approval. Claude never merges/approves/pushes to main.
+**Merge sequence:** contracts/migrations first, then PRs with independent data/runtime/validation/UI slices, then Mac integration and demo hardening. Each PR needs focused tests and CI, but no Claude self-review or teammate approval. Claude never merges/approves/pushes to main.
 
 ### Feature workflow and skills
 
 - **Before new code:** read `docs/architecture.md`, `AGENTS.md`, `docs/development-workflow.md`, and load `/.claude/skills/feature-dev/SKILL.md` (path relative to repo root, without the leading slash in CLI commands).
 - **Bug fixes:** `.claude/skills/bugfix/SKILL.md` and `docs/debugging-workflow.md`: reproduce, failing regression, root cause, fix, retest.
-- **Before PR ready:** `.claude/skills/self-review/SKILL.md` and `docs/ci-and-reviews.md`. Fix Critical and Important findings. A self-review is not a human approval.
+- **Fast PR handoff:** open a non-draft PR after targeted checks, without running `/self-review` or asking reviewers. Keep automated CI and data-security checks. See `docs/ci-and-reviews.md`.
 - **Agent reasoning:** keep independent agents separate; do not replace them with a central function that makes all decisions. Use structured source-attributed findings and deterministic, reversible fusion rules. Include tests of communications loss, retries, duplicate/out-of-order messages and recovery.
 - **Data security:** reports can contain sensitive locations and photos. Reporter-owned RLS, private media, server-side API keys, approximate public locations, input validation, abuse protections and audit trails are required. A reporter cannot assert trusted reviewer status or write another agent's findings.
 - **Scientific responsibility:** absence of satellite data is **unknown**, not evidence of absence. Weather alone cannot confirm fire; Claude vision cannot authenticate photographs. Never assert model confidence as calibrated probability unless measured and calibrated. No unreviewed user report becomes a verified incident.
