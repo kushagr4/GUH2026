@@ -67,7 +67,7 @@ describe("GET /api/embergap/map", () => {
   it.each([
     ["a bad bbox", "bbox=1,2,3"],
     ["an inverted bbox", "bbox=-1.55,53.3,-2.75,54"],
-    ["a huge bbox", "bbox=-60,0,0,20"],
+    ["a huge bbox", "bbox=-150,-60,0,20"],
     ["a zero limit", `bbox=${ITALY}&limit=0`],
     ["a huge limit", `bbox=${ITALY}&limit=5000`],
     ["a text limit", `bbox=${ITALY}&limit=lots`],

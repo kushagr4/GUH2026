@@ -2,7 +2,8 @@ import type { Bbox } from "@/lib/embergap/contracts";
 
 /** Web Mercator, as used by OpenStreetMap tiles. */
 export const TILE_SIZE = 256;
-export const MIN_ZOOM = 4;
+/** Low enough to show Europe with North Africa and the Middle East in one view. */
+export const MIN_ZOOM = 3;
 export const MAX_ZOOM = 18;
 const MAX_LAT = 85.05112878;
 
