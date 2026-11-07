@@ -209,9 +209,25 @@ describe("locations and map queries", () => {
 
   it("parses a bbox and rejects bad ones", () => {
     expect(parseBbox("-3,53,-2,54")).toEqual({ minLongitude: -3, minLatitude: 53, maxLongitude: -2, maxLatitude: 54 });
-    for (const bad of ["", "1,2,3", "-2,53,-3,54", "-3,54,-2,53", "a,b,c,d", "-3,53,-2,91", "-3,,-2,54"]) {
+    for (const bad of ["", "1,2,3", "-2,53,-3,54", "-3,54,-2,53", "a,b,c,d", "-3,,-2,54", "181,0,182,1"]) {
       expect(parseBbox(bad), bad).toBeNull();
     }
+  });
+
+  it("parses URLSearchParams.get() values, where missing params are null", () => {
+    const params = new URLSearchParams("");
+    expect(mapQuerySchema.parse({ bbox: params.get("bbox"), limit: params.get("limit") })).toEqual({ bbox: null, limit: 50 });
+    expect(mapQuerySchema.parse(Object.fromEntries(new URLSearchParams("limit=")))).toEqual({ bbox: null, limit: 50 });
+  });
+
+  it("clamps a zoomed-out viewport instead of rejecting it", () => {
+    expect(parseBbox("-237.3,-79.1,233.4,83.2")).toEqual({ minLongitude: -180, minLatitude: -79.1, maxLongitude: 180, maxLatitude: 83.2 });
+    expect(parseBbox("-3,53,Infinity,54")).toBeNull();
+  });
+
+  it("rounds exactly like the database: 3 decimals stored, then 2", () => {
+    expect(toPublicLocation({ latitude: 53.4649, longitude: 1.005 }).latitude).toBe(53.47);
+    expect(toPublicLocation({ latitude: 0, longitude: 1.005 }).longitude).toBe(1.01);
   });
 
   it("parses map query strings with a bounded limit", () => {
@@ -519,6 +535,13 @@ describe("investigation events", () => {
     expect(agentEventSchema.safeParse({ ...event, type: "status_changed", actor: "reporter" }).success).toBe(false);
   });
 
+  it("normalises database timestamps and never throws on bad details", () => {
+    const fromDb = agentEventSchema.parse({ ...event, occurredAt: "2026-11-07T14:00:00.123456+00:00" });
+    expect(fromDb.occurredAt).toBe("2026-11-07T14:00:00.123Z");
+    expect(agentEventSchema.safeParse({ ...event, details: { n: BigInt(1) } }).success).toBe(false);
+    expect(agentEventSchema.safeParse({ ...event, details: { text: "火".repeat(3_000) } }).success).toBe(false);
+  });
+
   it("bounds details and requires an idempotency key", () => {
     expect(agentEventSchema.safeParse({ ...event, details: { blob: "x".repeat(9_000) } }).success).toBe(false);
     expect(agentEventSchema.safeParse({ ...event, idempotencyKey: "  " }).success).toBe(false);
@@ -553,6 +576,7 @@ describe("read models", () => {
     expect(investigationSchema.safeParse({ ...investigation, reviewOutcome: "supported", reviewedAt: NOW }).success).toBe(
       false,
     );
+    expect(investigationSchema.safeParse({ ...investigation, reviewOutcome: "supported" }).success).toBe(false);
   });
 
   it("strips anything outside the contract from detail responses, such as a reporter id", () => {

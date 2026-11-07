@@ -10,7 +10,7 @@ import type { TestEnv } from "./test-env";
 const EMAIL_PREFIX = "guh-test+";
 const EMAIL_DOMAIN = "@example.test";
 const STALE_AFTER_MS = 30 * 60 * 1000;
-const BUCKETS = ["dev-smoke-private", "user-uploads"];
+const BUCKETS = ["dev-smoke-private", "user-uploads", "embergap-report-media"];
 
 export type TestClient = SupabaseClient<Database>;
 
