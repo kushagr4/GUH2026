@@ -3,33 +3,40 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { NETWORK_CARD, NETWORK_EYEBROW } from "./network-styles";
 import type { NetworkViewModel, NodeView, StageView } from "./view-model";
 
 const STEP_MS = 2_500;
 
-// Square layout: one partition side per column.
-const POS: Record<string, { x: number; y: number }> = {
-  weather: { x: 90, y: 70 },
-  vision: { x: 90, y: 250 },
-  satellite: { x: 410, y: 70 },
-  fusion: { x: 410, y: 250 },
+/** One plain sentence per stage. The runtime's own detail (counts and IDs) stays in the tooltip. */
+const STAGE_TEXT: Record<string, string> = {
+  connected: "All four agents can reach each other and share every update.",
+  partitioned: "The network splits in two. Each side can only talk to itself.",
+  working_in_isolation: "Both sides keep working with what they have. Tasks that need the other side's evidence wait.",
+  reconnected: "The link is back. Agents send each other everything they missed.",
+  reconciled: "Every agent has the same history again: nothing lost, no duplicate counted twice.",
 };
-
 const SHORT: Record<string, string> = { weather: "Weather", satellite: "Satellite", vision: "Vision", fusion: "Fusion" };
+const ORDER = ["weather", "vision", "satellite", "fusion"];
+
 
 function words(value: string) {
   return value.replace(/_/g, " ");
 }
 
-/** The first sentence, so cards stay readable on a projector; the full text is in the tooltip. */
-function firstSentence(text: string) {
-  const end = text.search(/[.!?](\s|$)/);
-  const sentence = end === -1 ? text : text.slice(0, end + 1);
-  return sentence.length > 200 ? `${sentence.slice(0, 197)}…` : sentence;
+function capitalise(value: string) {
+  return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
 function seconds(ms: number) {
   return `${(ms / 1000).toFixed(1)} s`;
+}
+
+/** The first clause of a sentence: enough to read at a glance. */
+function shortText(text: string, max = 110) {
+  const end = text.search(/[.;!?](\s|$)/);
+  const first = end === -1 ? text : text.slice(0, end);
+  return first.length > max ? `${first.slice(0, max - 1)}…` : first;
 }
 
 const REDUCED_MOTION = "(prefers-reduced-motion: reduce)";
@@ -50,151 +57,224 @@ function usePrefersReducedMotion() {
   );
 }
 
+type Status = { label: string; tone: "ok" | "warn" | "cut" };
+
+function statusOf(node: NodeView, stage: StageView): Status {
+  if (stage.split && node.reachable.length < 3) return { label: "Cut off, still working", tone: "cut" };
+  if (node.blockedOn.length) return { label: "Waiting for evidence", tone: "warn" };
+  return { label: "Connected", tone: "ok" };
+}
+
+const PILL: Record<Status["tone"], string> = {
+  ok: "border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-200",
+  warn: "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200",
+  cut: "border-red-300 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200",
+};
+
+/**
+ * Two sides with one bridge between them. The partition always splits the
+ * network into these two groups, so the cross-side links are drawn as one
+ * bridge instead of four crossing lines.
+ */
 function Diagram({ stage, groups }: { stage: StageView; groups: string[][] }) {
-  const leftGroup = groups.find((group) => group.includes("weather")) ?? [];
+  const byOrder = (ids: string[]) => [...ids].sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b));
+  const left = byOrder(groups.find((group) => group.includes("weather")) ?? ["weather", "vision"]);
+  const right = byOrder(groups.find((group) => !group.includes("weather")) ?? ["satellite", "fusion"]);
+  const side = (id: string) => (left.includes(id) ? "left" : "right");
+  const linkUp = (a: string, b: string) =>
+    stage.links.find((link) => (link.a === a && link.b === b) || (link.a === b && link.b === a))?.up ?? false;
+  const cross = stage.links.filter((link) => side(link.a) !== side(link.b));
+  const crossUp = cross.filter((link) => link.up).length;
+  const bridgeUp = crossUp === cross.length;
+  const nodes = new Map(stage.nodes.map((node) => [node.id, node]));
+
+  const W = 560;
+  const H = 280;
+  const cardW = 168;
+  const cardH = 66;
+  const slots = {
+    left: { x: 24, ys: [42, 172] },
+    right: { x: W - 24 - cardW, ys: [42, 172] },
+  } as const;
+
+  const card = (id: string, x: number, y: number) => {
+    const node = nodes.get(id);
+    if (!node) return null;
+    const status = statusOf(node, stage);
+    const dot = status.tone === "ok" ? "fill-emerald-500" : status.tone === "warn" ? "fill-amber-500" : "fill-red-500";
+    return (
+      <g key={id}>
+        <rect
+          x={x}
+          y={y}
+          width={cardW}
+          height={cardH}
+          rx="14"
+          strokeWidth="2"
+          className={cn(
+            "fill-white dark:fill-[#211711]",
+            id === "fusion" ? "stroke-orange-400" : "stroke-[#e8d3bd] dark:stroke-[#674632]",
+          )}
+        />
+        <circle cx={x + 20} cy={y + 24} r="5" className={dot} />
+        <text x={x + 34} y={y + 29} className="fill-[#49200c] text-[16px] font-semibold dark:fill-[#fff0db]">
+          {SHORT[id] ?? id}
+        </text>
+        <text x={x + 20} y={y + 51} className="fill-[#8a6a55] text-[13px] dark:fill-[#e5c7ad]">
+          {node.knows.events !== undefined ? `knows ${node.knows.events} updates` : `${node.tasksCompleted} tasks done`}
+        </text>
+      </g>
+    );
+  };
+
+  const vertical = (ids: string[], x: number) => {
+    const [top, bottom] = ids;
+    if (!top || !bottom) return null;
+    const up = linkUp(top, bottom);
+    return (
+      <line
+        x1={x + cardW / 2}
+        y1={42 + cardH}
+        x2={x + cardW / 2}
+        y2={172}
+        strokeWidth="4"
+        strokeLinecap="round"
+        strokeDasharray={up ? undefined : "8 7"}
+        className={up ? "stroke-emerald-500" : "stroke-red-500"}
+      />
+    );
+  };
+
+  const bridgeX1 = slots.left.x + cardW;
+  const bridgeX2 = slots.right.x;
+  const mid = (bridgeX1 + bridgeX2) / 2;
+
   return (
-    <svg viewBox="0 0 500 320" role="img" aria-label={`Agent network: ${stage.label}`} className="h-auto w-full max-w-xl">
-      {stage.split ? (
-        <>
-          <rect x="4" y="4" width="238" height="312" rx="16" className="fill-sky-500/10 stroke-sky-500/40" strokeWidth="2" />
-          <rect x="258" y="4" width="238" height="312" rx="16" className="fill-amber-500/10 stroke-amber-500/40" strokeWidth="2" />
-          <text x="123" y="306" textAnchor="middle" className="fill-sky-700 text-[13px] font-medium dark:fill-sky-300">
-            Side 1: {leftGroup.map((id) => SHORT[id] ?? id).join(" + ")}
+    <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`Agent network: ${stage.label}`} className="h-auto w-full">
+      <rect
+        x="8"
+        y="8"
+        width={cardW + 32}
+        height={H - 16}
+        rx="20"
+        strokeWidth="1.5"
+        className={stage.split ? "fill-sky-500/10 stroke-sky-400/60" : "fill-transparent stroke-[#f0deca] dark:stroke-[#674632]"}
+      />
+      <rect
+        x={W - 8 - (cardW + 32)}
+        y="8"
+        width={cardW + 32}
+        height={H - 16}
+        rx="20"
+        strokeWidth="1.5"
+        className={stage.split ? "fill-amber-500/10 stroke-amber-400/60" : "fill-transparent stroke-[#f0deca] dark:stroke-[#674632]"}
+      />
+      <text x={8 + (cardW + 32) / 2} y="30" textAnchor="middle" className="fill-[#8a6a55] text-[12px] font-semibold dark:fill-[#e5c7ad]">
+        SIDE 1
+      </text>
+      <text x={W - 8 - (cardW + 32) / 2} y="30" textAnchor="middle" className="fill-[#8a6a55] text-[12px] font-semibold dark:fill-[#e5c7ad]">
+        SIDE 2
+      </text>
+
+      {vertical(left, slots.left.x)}
+      {vertical(right, slots.right.x)}
+
+      {[75, 205].map((y) => (
+        <line
+          key={y}
+          x1={bridgeX1}
+          y1={y}
+          x2={bridgeX2}
+          y2={y}
+          strokeWidth="4"
+          strokeLinecap="round"
+          strokeDasharray={bridgeUp ? undefined : "8 7"}
+          className={bridgeUp ? "stroke-emerald-500" : "stroke-red-500"}
+        />
+      ))}
+      {!bridgeUp ? (
+        <g transform={`translate(${mid}, 140)`}>
+          <rect x="-46" y="-17" width="92" height="34" rx="17" className="fill-red-50 stroke-red-400 dark:fill-red-950" strokeWidth="1.5" />
+          <text textAnchor="middle" y="5" className="fill-red-700 text-[13px] font-semibold dark:fill-red-300">
+            ✕ Split
           </text>
-          <text x="377" y="306" textAnchor="middle" className="fill-amber-700 text-[13px] font-medium dark:fill-amber-300">
-            Side 2: {(groups.find((group) => group !== leftGroup) ?? []).map((id) => SHORT[id] ?? id).join(" + ")}
-          </text>
-        </>
+        </g>
       ) : null}
-      {stage.links.map((link) => {
-        const a = POS[link.a];
-        const b = POS[link.b];
-        if (!a || !b) return null;
-        const mx = (a.x + b.x) / 2;
-        const my = (a.y + b.y) / 2;
-        // Nudge the two crossing diagonals' ✕ marks apart.
-        const diagonal = a.x !== b.x && a.y !== b.y;
-        const offset = diagonal ? (link.a === "satellite" || link.b === "satellite" ? -26 : 26) : 0;
-        return (
-          <g key={`${link.a}-${link.b}`}>
-            <line
-              x1={a.x}
-              y1={a.y}
-              x2={b.x}
-              y2={b.y}
-              strokeWidth={link.up ? 5 : 4}
-              strokeDasharray={link.up ? undefined : "10 8"}
-              strokeLinecap="round"
-              className={link.up ? "stroke-emerald-500" : "stroke-red-500"}
-            />
-            {!link.up ? (
-              <g transform={`translate(${mx + offset * 0.6}, ${my + offset * 0.4})`}>
-                <circle r="14" className="fill-background stroke-red-500" strokeWidth="3" />
-                <path d="M -6 -6 L 6 6 M 6 -6 L -6 6" className="stroke-red-500" strokeWidth="4" strokeLinecap="round" />
-              </g>
-            ) : null}
-          </g>
-        );
-      })}
-      {stage.nodes.map((node) => {
-        const p = POS[node.id];
-        if (!p) return null;
-        const blocked = node.blockedOn.length > 0;
-        return (
-          <g key={node.id} transform={`translate(${p.x}, ${p.y})`}>
-            <circle
-              r="42"
-              strokeWidth="4"
-              className={cn("fill-card", node.id === "fusion" ? "stroke-orange-500" : "stroke-foreground/60", blocked && "stroke-amber-500")}
-            />
-            <text y="-4" textAnchor="middle" className="fill-foreground text-[15px] font-semibold">
-              {SHORT[node.id] ?? node.id}
-            </text>
-            <text y="16" textAnchor="middle" className="fill-muted-foreground text-[12px]">
-              {node.knows.events !== undefined ? `${node.knows.events} events` : `${node.tasksCompleted} tasks`}
-            </text>
-          </g>
-        );
-      })}
+
+      {left.map((id, i) => card(id, slots.left.x, slots.left.ys[i] ?? 42))}
+      {right.map((id, i) => card(id, slots.right.x, slots.right.ys[i] ?? 42))}
     </svg>
   );
 }
 
-function FusionBlock({ node, previous }: { node: NodeView; previous?: NodeView }) {
-  if (!node.fusion?.length) return <p className="text-muted-foreground">No recommendation yet.</p>;
+function AgentRow({ node, previous, stage }: { node: NodeView; previous?: NodeView; stage: StageView }) {
+  const status = statusOf(node, stage);
+  const finding = node.latestFinding;
   return (
-    <div className="flex flex-col gap-2">
-      {node.fusion.map((rec) => {
-        const before = previous?.fusion?.find((item) => item.report === rec.report);
-        const changed = !before || before.status !== rec.status || before.priority !== rec.priority || before.independentSources !== rec.independentSources;
-        return (
-          <div key={rec.report} className={cn("rounded-lg border p-2", changed && "border-orange-500 bg-orange-500/10")}>
-            <div className="flex flex-wrap items-baseline justify-between gap-1">
-              <span className="font-semibold">{rec.report}</span>
-              {changed ? <span className="text-xs font-medium text-orange-700 dark:text-orange-300">{before ? "changed" : "new"}</span> : null}
-            </div>
-            <p>
-              <span className="font-medium">{words(rec.status)}</span> · {rec.priority} review priority · {rec.independentSources} independent source
-              {rec.independentSources === 1 ? "" : "s"}
-            </p>
-            {rec.gaps.length ? (
-              <ul className="mt-1 list-disc pl-4 text-xs text-muted-foreground">
-                {rec.gaps.map((gap) => (
-                  <li key={gap}>{gap}</li>
-                ))}
-              </ul>
-            ) : null}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function NodeCard({ node, previous, stage }: { node: NodeView; previous?: NodeView; stage: StageView }) {
-  const isolated = stage.split && node.reachable.length < 3;
-  return (
-    <article
-      aria-label={node.label}
-      className={cn("flex flex-col gap-2 rounded-xl border bg-card p-4 text-sm text-card-foreground", node.id === "fusion" && "sm:col-span-2 border-orange-500/60")}
-    >
-      <header className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-lg font-semibold">{node.label}</h3>
-        {isolated ? <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-200">cut off, still working</span> : null}
-      </header>
-      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
-        <dt className="text-muted-foreground">Knows</dt>
-        <dd>
-          {node.knows.events !== undefined ? `${node.knows.events} events · ` : ""}
-          {node.knows.findings} own finding{node.knows.findings === 1 ? "" : "s"}
-        </dd>
-        <dt className="text-muted-foreground">Can reach</dt>
-        <dd className={cn(node.reachable.length < 3 && "font-medium text-red-700 dark:text-red-300")}>
-          {node.reachable.length ? node.reachable.map((id) => SHORT[id] ?? id).join(", ") : "nobody"}
-        </dd>
-        <dt className="text-muted-foreground">Completed</dt>
-        <dd>
-          {node.tasksCompleted} task{node.tasksCompleted === 1 ? "" : "s"}
-        </dd>
-        <dt className="text-muted-foreground">Waiting for</dt>
-        <dd className={cn(node.blockedOn.length && "font-medium text-amber-800 dark:text-amber-200")}>
-          {node.blockedOn.length ? node.blockedOn.join("; ") : "nothing"}
-        </dd>
-      </dl>
+    <li className="flex flex-col gap-1.5 border-b border-[#f2e5d7] py-3 last:border-0 dark:border-[#674632]">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="font-semibold text-[#49200c] dark:text-[#fff0db]">{node.label}</span>
+        <span className={cn("rounded-full border px-2 py-0.5 text-xs font-medium", PILL[status.tone])}>{status.label}</span>
+      </div>
+      <p className="text-sm text-[#705342] dark:text-[#e5c7ad]">
+        {node.tasksCompleted} task{node.tasksCompleted === 1 ? "" : "s"} done · {node.knows.findings} finding
+        {node.knows.findings === 1 ? "" : "s"} of its own
+        {node.blockedOn.length ? (
+          <span title={node.blockedOn.join(", ")}>
+            {" "}
+            · waiting on {node.blockedOn.length} item{node.blockedOn.length === 1 ? "" : "s"} from the other side
+          </span>
+        ) : null}
+      </p>
       {node.id === "fusion" ? (
-        <div className="flex flex-col gap-1">
-          <p className="font-medium">
-            Current review recommendation{stage.split ? " (decided locally, from the evidence on its side only)" : ""}
-          </p>
-          <FusionBlock node={node} previous={previous} />
-        </div>
-      ) : node.latestFinding ? (
-        <p className="text-muted-foreground" title={node.latestFinding.summary}>
-          <span className="font-medium text-foreground">Latest ({node.latestFinding.report}):</span> {words(node.latestFinding.assessment)}
-          {node.latestFinding.reasonCodes.length ? ` · ${node.latestFinding.reasonCodes.join(", ")}` : ""}. {firstSentence(node.latestFinding.summary)}
+        node.fusion?.length ? (
+          <ul className="flex flex-col gap-1.5">
+            {node.fusion.map((rec) => {
+              const before = previous?.fusion?.find((item) => item.report === rec.report);
+              const changed =
+                !before ||
+                before.status !== rec.status ||
+                before.priority !== rec.priority ||
+                before.independentSources !== rec.independentSources;
+              return (
+                <li
+                  key={rec.report}
+                  className={cn(
+                    "rounded-xl border px-3 py-2 text-sm",
+                    changed ? "border-orange-300 bg-orange-50 dark:border-orange-900 dark:bg-orange-950/40" : "border-[#f0deca] dark:border-[#674632]",
+                  )}
+                >
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="font-medium text-[#49200c] dark:text-[#fff0db]">{rec.report}</span>
+                    {changed ? <span className="text-xs font-semibold text-orange-700 dark:text-orange-300">{before ? "Updated" : "New"}</span> : null}
+                  </div>
+                  <p className="text-[#705342] dark:text-[#e5c7ad]">
+                    {capitalise(words(rec.status))} · {rec.priority} priority · {rec.independentSources} independent source
+                    {rec.independentSources === 1 ? "" : "s"}
+                  </p>
+                  {rec.gaps[0] ? (
+                    <p className="text-xs text-[#8a6a55] dark:text-[#d9b99c]" title={rec.gaps.join(" ")}>
+                      Gap: {shortText(rec.gaps[0], 80)}
+                    </p>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <p className="text-sm text-[#8a6a55]">No recommendation yet.</p>
+        )
+      ) : finding ? (
+        <p className="text-sm" title={finding.summary}>
+          <span className="font-medium text-[#49200c] dark:text-[#fff0db]">{capitalise(words(finding.assessment))}:</span>{" "}
+          <span className="text-[#705342] dark:text-[#e5c7ad]">
+            {finding.reasonCodes.length ? finding.reasonCodes.map(words).join(", ") : shortText(finding.summary)}
+          </span>
         </p>
-      ) : null}
-    </article>
+      ) : (
+        <p className="text-sm text-[#8a6a55]">No finding yet.</p>
+      )}
+    </li>
   );
 }
 
@@ -216,118 +296,146 @@ export function NetworkView({ model }: { model: NetworkViewModel }) {
 
   if (!stage) return <p>No stages to show.</p>;
   const previous = index > 0 ? model.stages[index - 1] : undefined;
+  const nodes = [...stage.nodes].sort((a, b) => ORDER.indexOf(a.id) - ORDER.indexOf(b.id));
+  const m = model.metrics;
 
   return (
-    <div className="flex flex-col gap-6">
-      <section aria-label="Stage controls" className="flex flex-col gap-3">
-        <ol className="grid grid-cols-1 gap-2 sm:grid-cols-5">
-          {model.stages.map((item, i) => (
-            <li key={item.id}>
-              <button
-                type="button"
-                onClick={() => {
-                  setIndex(i);
-                  setPlaying(false);
-                }}
-                aria-current={i === index ? "step" : undefined}
-                className={cn(
-                  "w-full rounded-lg border px-3 py-2 text-left text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
-                  i === index ? "border-orange-500 bg-orange-500/10 font-semibold" : "hover:bg-muted",
-                  item.split && "border-red-500/50",
-                )}
-              >
-                <span className="text-muted-foreground">{i + 1}.</span> {item.label}
-              </button>
-            </li>
-          ))}
-        </ol>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button type="button" variant="outline" onClick={() => setIndex(Math.max(0, index - 1))} disabled={index === 0}>
-            ← Prev
-          </Button>
-          <Button
-            type="button"
-            onClick={() => {
-              if (!playing && index >= last) setIndex(0);
-              setPlaying(!playing);
-            }}
-            aria-pressed={playing}
-          >
-            {playing ? "❚❚ Pause" : "▶ Play"}
-          </Button>
-          <Button type="button" variant="outline" onClick={() => setIndex(Math.min(last, index + 1))} disabled={index === last}>
-            Next →
-          </Button>
-          <span className="text-sm text-muted-foreground">
-            Step {index + 1} of {model.stages.length} · t = {seconds(stage.simTimeMs)}
-          </span>
-        </div>
-        <p aria-live="polite" className="text-xl font-medium leading-snug sm:text-2xl">
-          <span className={cn("mr-2", stage.split ? "text-red-600 dark:text-red-400" : "text-emerald-700 dark:text-emerald-400")}>{stage.label}.</span>
-          {stage.detail}
-        </p>
-      </section>
-
-      <section aria-label="Network and agents" className="grid gap-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
-        <div className="flex flex-col gap-3">
-          <Diagram stage={stage} groups={model.groups} />
-          <div className="flex flex-wrap gap-4 text-sm">
-            <span className="flex items-center gap-2">
-              <span className="inline-block h-1.5 w-8 rounded bg-emerald-500" /> link up
-            </span>
-            <span className="flex items-center gap-2">
-              <span className="inline-block h-0 w-8 border-t-4 border-dashed border-red-500" /> link cut ✕
-            </span>
+    <div className="flex flex-col gap-5">
+      <section aria-label="The partition, step by step" className={cn(NETWORK_CARD, "flex flex-col gap-5")}>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <ol className="flex w-full min-w-0 items-center gap-1 sm:flex-1">
+            {model.stages.map((item, i) => (
+              <li key={item.id} className="flex min-w-0 flex-1 items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIndex(i);
+                    setPlaying(false);
+                  }}
+                  aria-current={i === index ? "step" : undefined}
+                  aria-label={`Step ${i + 1}: ${item.label}`}
+                  className="group flex min-w-0 flex-col items-center gap-1.5 rounded-lg px-1 py-1 focus-visible:outline-2 focus-visible:outline-ring"
+                >
+                  <span
+                    className={cn(
+                      "flex size-8 shrink-0 items-center justify-center rounded-full border-2 text-sm font-semibold",
+                      i === index
+                        ? "border-[#b83d00] bg-[#b83d00] text-white"
+                        : i < index
+                          ? "border-[#e8a466] bg-[#fff0df] text-[#9c3b08]"
+                          : "border-[#f0deca] bg-white text-[#8a6a55] group-hover:border-[#e8a466] dark:bg-[#211711]",
+                    )}
+                  >
+                    {i + 1}
+                  </span>
+                  <span
+                    className={cn(
+                      "hidden truncate text-xs sm:block",
+                      i === index ? "font-semibold text-[#49200c] dark:text-[#fff0db]" : "text-[#8a6a55] dark:text-[#e5c7ad]",
+                    )}
+                  >
+                    {item.label}
+                  </span>
+                </button>
+                {i < last ? (
+                  <span aria-hidden className={cn("h-0.5 flex-1 rounded sm:mb-5", i < index ? "bg-[#e8a466]" : "bg-[#f0deca]")} />
+                ) : null}
+              </li>
+            ))}
+          </ol>
+          <div className="flex items-center gap-2">
+            <Button type="button" variant="outline" size="sm" onClick={() => setIndex(Math.max(0, index - 1))} disabled={index === 0}>
+              ← Prev
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              className="bg-[#b83d00] text-white hover:bg-[#913000]"
+              onClick={() => {
+                if (!playing && index >= last) setIndex(0);
+                setPlaying(!playing);
+              }}
+              aria-pressed={playing}
+            >
+              {playing ? "❚❚ Pause" : "▶ Play"}
+            </Button>
+            <Button type="button" variant="outline" size="sm" onClick={() => setIndex(Math.min(last, index + 1))} disabled={index === last}>
+              Next →
+            </Button>
           </div>
-          <aside className="rounded-xl border bg-muted/40 p-4 text-sm leading-relaxed">
-            <h2 className="mb-1 text-base font-semibold">How they talk</h2>
-            <p>
-              Each agent keeps its own copy of the evidence and gossips what its neighbours are missing. No central server. When a link breaks,
-              agents keep working with what they have; on reconnection they swap what&apos;s missing, ignore duplicates, and end with identical
-              histories.
-            </p>
-          </aside>
         </div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {stage.nodes.map((node) => (
-            <NodeCard key={node.id} node={node} stage={stage} previous={previous?.nodes.find((item) => item.id === node.id)} />
-          ))}
+
+        <div aria-live="polite" className="flex flex-col gap-1">
+          <p className="text-xs font-medium text-[#8a6a55] dark:text-[#e5c7ad]">
+            Step {index + 1} of {model.stages.length} · {seconds(stage.simTimeMs)} into the run
+          </p>
+          <p className="text-xl leading-snug text-[#49200c] sm:text-2xl dark:text-[#fff0db]" title={stage.detail}>
+            <span className={cn("font-semibold", stage.split ? "text-red-600 dark:text-red-400" : "text-emerald-700 dark:text-emerald-400")}>
+              {stage.label}.
+            </span>{" "}
+            {STAGE_TEXT[stage.id] ?? stage.detail}
+          </p>
+        </div>
+
+        <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+          <div className="flex flex-col gap-2">
+            <Diagram stage={stage} groups={model.groups} />
+            <p className="text-sm text-[#705342] dark:text-[#e5c7ad]">
+              No central server: agents share updates directly. Cut off, they keep working; reconnected, they catch up and ignore duplicates.
+            </p>
+          </div>
+          <ul aria-label="Agents" className="flex flex-col">
+            {nodes.map((node) => (
+              <AgentRow key={node.id} node={node} stage={stage} previous={previous?.nodes.find((item) => item.id === node.id)} />
+            ))}
+          </ul>
         </div>
       </section>
 
-      <section aria-label="Proof from the runtime" className="flex flex-col gap-3 rounded-xl border p-4">
-        <h2 className="text-lg font-semibold">Proof from the run itself</h2>
-        <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+      <section aria-labelledby="proof-heading" className={cn(NETWORK_CARD, "flex flex-col gap-4")}>
+        <div>
+          <p className={NETWORK_EYEBROW}>From the run itself</p>
+          <h2 id="proof-heading" className="mt-1 text-xl font-semibold tracking-tight text-[#49200c] dark:text-[#fff0db]">
+            What this proves
+          </h2>
+        </div>
+        <ul className="flex flex-wrap gap-2">
           {model.checks.map((check) => (
-            <li key={check.name} className="flex items-start gap-2 text-sm" title={check.detail}>
-              <span aria-hidden className={cn("text-lg leading-none", check.passed ? "text-emerald-600" : "text-red-600")}>
-                {check.passed ? "✔" : "✘"}
-              </span>
-              <span>
-                <span className="sr-only">{check.passed ? "Passed: " : "Failed: "}</span>
-                {check.name}
-              </span>
+            <li
+              key={check.name}
+              title={check.detail}
+              className={cn(
+                "rounded-full border px-3 py-1 text-sm",
+                check.passed
+                  ? "border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-200"
+                  : "border-red-300 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200",
+              )}
+            >
+              <span aria-hidden>{check.passed ? "✓ " : "✕ "}</span>
+              <span className="sr-only">{check.passed ? "Passed: " : "Failed: "}</span>
+              {capitalise(check.name)}
             </li>
           ))}
         </ul>
-        <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
-          {[
-            ["Events redelivered after the heal", model.metrics.redelivered],
-            ["Duplicates ignored", model.metrics.duplicatesIgnored],
-            ["Tasks completed while isolated", model.metrics.completedWhileIsolated],
-            ["Settled after the heal", model.metrics.settleMsAfterHeal === null ? null : seconds(model.metrics.settleMsAfterHeal)],
-            ["Messages sent", model.metrics.messagesSent],
-            ["Dropped by the partition", model.metrics.droppedByPartition],
-            ["Dropped by random loss", model.metrics.droppedByLoss],
-            ["Duplicated on the wire", model.metrics.duplicatedOnWire],
-          ].map(([label, value]) => (
-            <div key={String(label)} className="rounded-lg bg-muted/50 p-3">
-              <dt className="text-muted-foreground">{label}</dt>
-              <dd className="text-2xl font-semibold">{value ?? "n/a"}</dd>
+        <dl className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {(
+            [
+              ["Tasks done while cut off", m.completedWhileIsolated],
+              ["Updates resent after reconnecting", m.redelivered],
+              ["Duplicates safely ignored", m.duplicatesIgnored],
+              ["Back in sync after", m.settleMsAfterHeal === null ? null : seconds(m.settleMsAfterHeal)],
+            ] as const
+          ).map(([label, value]) => (
+            <div key={label} className="rounded-xl bg-[#fff6ec] p-3 dark:bg-[#211711]">
+              <dt className="text-xs text-[#8a6a55] dark:text-[#e5c7ad]">{label}</dt>
+              <dd className="text-2xl font-semibold text-[#49200c] dark:text-[#fff0db]">{value ?? "n/a"}</dd>
             </div>
           ))}
         </dl>
-        <p className="text-xs text-muted-foreground">Links also lose and duplicate messages at random throughout.</p>
+        <p className="text-xs text-[#8a6a55] dark:text-[#e5c7ad]">
+          {m.messagesSent} messages sent · {m.droppedByPartition} dropped by the split · {m.droppedByLoss} lost at random ·{" "}
+          {m.duplicatedOnWire} duplicated in transit
+        </p>
       </section>
     </div>
   );

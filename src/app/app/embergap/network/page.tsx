@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { buildEveryNodeViewModel } from "@/components/embergap/network/decentralised-view-model";
 import { EveryNodeDecides } from "@/components/embergap/network/every-node-decides";
+import { NETWORK_EYEBROW } from "@/components/embergap/network/network-styles";
 import { NetworkView } from "@/components/embergap/network/network-view";
 import { createDeterministicDeps, DECENTRALISED_SCENARIOS, simulateDecentralisedFusion } from "@/lib/embergap/agents/fusion";
 import { buildNetworkViewModel, stageSnapshotTimes, type StageId } from "@/components/embergap/network/view-model";
@@ -28,16 +29,14 @@ export default async function EmberGapNetworkPage() {
   );
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="mx-auto flex w-full max-w-5xl min-w-0 flex-col gap-5">
       <header className="flex flex-col gap-2">
-        <p className="text-sm font-medium uppercase tracking-wide text-orange-700 dark:text-orange-300">How the agents work together</p>
-        <h1 className="text-3xl font-semibold tracking-tight">Agent network</h1>
-        <p className="text-lg">
-          Four independent agents investigate a possible fire reported on the vineyard slopes of Mount Etna, Sicily (Report A). A second
-          report, from the Salento vineyards in Puglia (Report B), arrives while the network is split. Watch what each agent knows, and how
-          they catch up when the links come back.
+        <p className={NETWORK_EYEBROW}>How the agents work together</p>
+        <h1 className="text-3xl font-semibold tracking-tight text-[#49200c] dark:text-[#fff0db]">Agent network</h1>
+        <p className="max-w-3xl text-base leading-7 text-[#705342] dark:text-[#e5c7ad]">
+          Four agents investigate a possible fire on Mount Etna&apos;s vineyards (Report A). Midway, the network splits and a second report
+          arrives from Puglia (Report B). Step through to see each agent keep working, then catch up.
         </p>
-        <p className="text-sm text-muted-foreground">Outputs are review recommendations for a human, not verified incidents.</p>
       </header>
       <NetworkView model={model} />
       <EveryNodeDecides model={everyNode} />
