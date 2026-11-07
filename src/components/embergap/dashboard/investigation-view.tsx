@@ -9,8 +9,12 @@ import {
   type SourceKind,
 } from "@/lib/embergap/contracts";
 import {
+  ACTOR_DOT,
   ACTOR_LABEL,
+  ASSESSMENT_ACCENT,
   ASSESSMENT_LABEL,
+  SOURCE_ACCENT,
+  priorityAccent,
   ASSESSMENT_TONE,
   NETWORK_EVENTS,
   SOURCE_LABEL,
@@ -105,7 +109,7 @@ export function InvestigationView({ detail }: { detail: InvestigationDetailRespo
 
       <AgentStrip findings={findings} />
 
-      <Card>
+      <Card className={`border-l-4 ${priorityAccent(recommendation?.reviewPriority ?? investigation.reviewPriority)}`}>
         <CardHeader>
           <CardTitle className="flex flex-wrap items-center gap-2">
             Review recommendation
@@ -164,7 +168,7 @@ export function InvestigationView({ detail }: { detail: InvestigationDetailRespo
           {detail.sourceAvailability.map((item) => {
             const summary = observationSummary(item.source, observations);
             return (
-              <Card key={item.source} size="sm">
+              <Card key={item.source} size="sm" className={`border-t-4 ${SOURCE_ACCENT[item.source]}`}>
                 <CardHeader>
                   <CardTitle className="flex flex-wrap items-center justify-between gap-2">
                     {SOURCE_LABEL[item.source]}
@@ -195,9 +199,10 @@ export function InvestigationView({ detail }: { detail: InvestigationDetailRespo
           <ol className="flex flex-col gap-3">
             {agentFindings.map((finding) => (
               <li key={finding.id}>
-                <Card size="sm">
+                <Card size="sm" className={`border-l-4 ${ASSESSMENT_ACCENT[finding.assessment]}`}>
                   <CardHeader>
                     <CardTitle className="flex flex-wrap items-center gap-2">
+                      <span aria-hidden className={`size-2.5 rounded-full ${ACTOR_DOT[finding.agentId]}`} />
                       {ACTOR_LABEL[finding.agentId]}
                       <ToneBadge tone={ASSESSMENT_TONE[finding.assessment]}>
                         {ASSESSMENT_LABEL[finding.assessment]}
@@ -262,7 +267,7 @@ export function InvestigationView({ detail }: { detail: InvestigationDetailRespo
                   <li key={event.id} className="relative text-sm">
                     <span
                       aria-hidden
-                      className={`absolute top-1.5 -left-[1.3rem] size-2 rounded-full ${network ? "bg-sky-500" : "bg-foreground/40"}`}
+                      className={`absolute top-1.5 -left-[1.4rem] size-2.5 rounded-full ring-2 ring-background ${ACTOR_DOT[event.actor]}`}
                     />
                     <p className={network ? "font-medium text-sky-800 dark:text-sky-300" : undefined}>{event.summary}</p>
                     <p className="text-xs text-muted-foreground">

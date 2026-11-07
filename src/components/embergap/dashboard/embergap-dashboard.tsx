@@ -31,6 +31,12 @@ import { ToneBadge } from "./tone-badge";
 
 const MAP_LIMIT = 200;
 
+type Layout = "wide" | "side";
+const LAYOUTS: ReadonlyArray<readonly [Layout, string]> = [
+  ["wide", "Full-width map"],
+  ["side", "Side panel"],
+];
+
 /** Synthetic runs are "as of" SYNTHETIC_NOW, so the demo reads the same at any time. */
 function referenceTime(data: MapResponse): string {
   return data.mode === "synthetic" ? SYNTHETIC_NOW : data.generatedAt;
@@ -64,7 +70,9 @@ export function EmberGapDashboard({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [anomaliesOpen, setAnomaliesOpen] = useState(false);
   const [investigationsOpen, setInvestigationsOpen] = useState(true);
+  const [layout, setLayout] = useState<Layout>("wide");
   const requestRef = useRef<AbortController | null>(null);
+  const side = layout === "side";
 
   const now = referenceTime(data);
   const investigations = data.features.filter((feature) => feature.kind === "investigation");
@@ -139,9 +147,25 @@ export function EmberGapDashboard({
         {firms?.state === "unavailable" && firms.message ? (
           <span className="text-amber-800 dark:text-amber-300">{firms.message}</span>
         ) : null}
+        <div className="ml-auto flex gap-1 rounded-lg border bg-background p-0.5" role="group" aria-label="Layout">
+          {LAYOUTS.map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              aria-pressed={layout === id}
+              onClick={() => setLayout(id)}
+              className={cn(
+                "rounded-md px-2.5 py-1 font-medium",
+                layout === id ? "bg-orange-600 text-white" : "text-foreground hover:bg-orange-50 dark:hover:bg-orange-950",
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_20rem]">
+      <div className={side ? "grid gap-3 lg:grid-cols-[minmax(0,1fr)_20rem]" : "flex flex-col gap-3"}>
         <HeatMap
           features={data.features}
           regions={regions}
@@ -150,12 +174,19 @@ export function EmberGapDashboard({
           onSelect={select}
           onViewSettled={load}
           labelFor={featureLabel}
-          className="h-[65vh] min-h-[420px] lg:h-[calc(100vh-12rem)]"
+          className="h-[65vh] min-h-[420px] w-full lg:h-[calc(100vh-13rem)]"
         />
 
-        <aside className="flex flex-col gap-3 lg:max-h-[calc(100vh-12rem)] lg:overflow-y-auto">
+        <div
+          className={
+            side
+              ? "flex flex-col gap-3 lg:max-h-[calc(100vh-13rem)] lg:overflow-y-auto"
+              : "grid items-start gap-3 md:grid-cols-2"
+          }
+        >
           <Section
             title="Investigations"
+            tone="rose"
             count={investigations.length}
             open={investigationsOpen}
             onToggle={() => setInvestigationsOpen((open) => !open)}
@@ -172,6 +203,7 @@ export function EmberGapDashboard({
           </Section>
           <Section
             title="Thermal anomalies"
+            tone="amber"
             count={anomalies.length}
             open={anomaliesOpen}
             onToggle={() => setAnomaliesOpen((open) => !open)}
@@ -186,7 +218,7 @@ export function EmberGapDashboard({
               />
             ))}
           </Section>
-        </aside>
+        </div>
       </div>
     </div>
   );
@@ -204,21 +236,34 @@ function Chevron({ open }: { open: boolean }) {
   );
 }
 
+const SECTION_TONE = {
+  rose: {
+    edge: "border-t-rose-500",
+    pill: "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-200",
+  },
+  amber: {
+    edge: "border-t-amber-500",
+    pill: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200",
+  },
+} as const;
+
 function Section({
   title,
   count,
+  tone,
   open,
   onToggle,
   children,
 }: {
   title: string;
   count: number;
+  tone: keyof typeof SECTION_TONE;
   open: boolean;
   onToggle: () => void;
   children: ReactNode;
 }) {
   return (
-    <details open={open} className="rounded-xl border bg-card">
+    <details open={open} className={cn("rounded-xl border border-t-4 bg-card", SECTION_TONE[tone].edge)}>
       <summary
         onClick={(event) => {
           event.preventDefault();
@@ -226,8 +271,11 @@ function Section({
         }}
         className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2.5 text-sm font-medium [&::-webkit-details-marker]:hidden"
       >
-        <span>
-          {title} <span className="text-muted-foreground">{count}</span>
+        <span className="flex items-center gap-2">
+          {title}
+          <span className={cn("rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums", SECTION_TONE[tone].pill)}>
+            {count}
+          </span>
         </span>
         <Chevron open={open} />
       </summary>
@@ -254,7 +302,13 @@ function Item({
   const precisionKm = Math.round(feature.location.precisionMeters / 100) / 10;
   return (
     <li id={`feature-${feature.id}`}>
-      <details open={open} className={cn("rounded-lg", open ? "bg-muted" : "hover:bg-muted/60")}>
+      <details
+        open={open}
+        className={cn(
+          "rounded-lg",
+          open ? "bg-orange-50 ring-1 ring-orange-200 dark:bg-orange-950/40 dark:ring-orange-900" : "hover:bg-muted/60",
+        )}
+      >
         <summary
           onClick={(event) => {
             event.preventDefault();
@@ -262,19 +316,21 @@ function Item({
           }}
           className="flex cursor-pointer list-none items-center gap-2 px-2 py-1.5 text-sm [&::-webkit-details-marker]:hidden"
         >
-          {feature.kind === "investigation" ? (
-            <span
-              aria-hidden
-              className={cn(
-                "h-4 w-1 shrink-0 rounded-full",
-                feature.reviewPriority === "high"
+          <span
+            aria-hidden
+            className={cn(
+              "h-4 w-1 shrink-0 rounded-full",
+              feature.kind === "investigation"
+                ? feature.reviewPriority === "high"
                   ? "bg-red-600"
                   : feature.reviewPriority === "medium"
                     ? "bg-yellow-400"
-                    : "bg-sky-500",
-              )}
-            />
-          ) : null}
+                    : "bg-sky-500"
+                : feature.freshness === "available"
+                  ? "bg-orange-500"
+                  : "bg-stone-400",
+            )}
+          />
           <span className="min-w-0 flex-1 truncate">{featureLabel(feature)}</span>
           <span className="shrink-0 text-xs text-muted-foreground">{age(feature, now)}</span>
           <Chevron open={open} />
@@ -301,7 +357,7 @@ function Item({
               {feature.investigationId ? (
                 <Link
                   href={`/app/embergap/investigations/${feature.investigationId}`}
-                  className="self-start rounded-md bg-foreground px-2.5 py-1 font-medium text-background hover:bg-foreground/90"
+                  className="self-start rounded-md bg-orange-600 px-2.5 py-1 font-medium text-white hover:bg-orange-700"
                 >
                   Open investigation
                 </Link>
