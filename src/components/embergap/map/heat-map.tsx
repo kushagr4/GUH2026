@@ -220,12 +220,14 @@ export function HeatMap({
       const delta = event.deltaMode === 1 ? event.deltaY * 16 : event.deltaMode === 2 ? event.deltaY * 400 : event.deltaY;
       // Trackpad pinches arrive as ctrl+wheel with small deltas; a mouse notch is about 100.
       const step = Math.max(-1, Math.min(1, -delta * (event.ctrlKey ? PINCH_ZOOM_PER_UNIT : WHEEL_ZOOM_PER_UNIT)));
-      setCamera(
-        zoomAround(current, currentSize, current.zoom + step, {
-          x: event.clientX - rect.left,
-          y: event.clientY - rect.top,
-        }),
-      );
+      const next = zoomAround(current, currentSize, current.zoom + step, {
+        x: event.clientX - rect.left,
+        y: event.clientY - rect.top,
+      });
+      // Trackpads fire wheel events faster than React re-renders: record the
+      // new camera now so the next event builds on it instead of overwriting it.
+      latest.current = { ...latest.current, camera: next };
+      setCamera(next);
       setHover(null);
       settle();
     };
