@@ -12,6 +12,8 @@ import type { FirmsDetection, FirmsEvidence, FirmsSource } from "./types";
  * - partition-recovery: one VIIRS detection before the report
  * - missing-satellite-pass and misleading-photo: deliberately none nearby
  * - one unlinked night detection, old enough to be stale
+ * - Campania wine country (the default map view): unlinked detections on the
+ *   Vesuvius vineyard slopes, in Irpinia and in the Sannio
  */
 type Row = {
   key: string;
@@ -82,6 +84,65 @@ const ROWS: Row[] = [
     longitude: -2.1043,
     observedAt: "2026-11-06T23:40:00.000Z",
     evidence: { ...VIIRS, satellite: "1", confidence: "low", frpMegawatts: 1.2, brightnessKelvin: 301.4, dayNight: "night" },
+  },
+  // Campania: two adjacent pixels above the Terzigno vineyards on Vesuvius.
+  {
+    key: "campania/vesuvius-terzigno-1",
+    product: "VIIRS_NOAA20_NRT",
+    latitude: 40.8048,
+    longitude: 14.4721,
+    observedAt: "2026-11-07T11:24:00.000Z",
+    evidence: { ...VIIRS, satellite: "1", confidence: "high", frpMegawatts: 11.3, brightnessKelvin: 343.6, dayNight: "day" },
+  },
+  {
+    key: "campania/vesuvius-terzigno-2",
+    product: "VIIRS_NOAA20_NRT",
+    latitude: 40.8031,
+    longitude: 14.4769,
+    observedAt: "2026-11-07T11:24:00.000Z",
+    evidence: { ...VIIRS, satellite: "1", confidence: "nominal", frpMegawatts: 6.2, brightnessKelvin: 331.9, dayNight: "day" },
+  },
+  {
+    key: "campania/vesuvius-boscotrecase",
+    product: "VIIRS_SNPP_NRT",
+    latitude: 40.7869,
+    longitude: 14.4402,
+    observedAt: "2026-11-07T10:41:00.000Z",
+    evidence: { ...VIIRS, satellite: "N", confidence: "nominal", frpMegawatts: 4.1, brightnessKelvin: 326.4, dayNight: "day" },
+  },
+  {
+    key: "campania/irpinia-taurasi",
+    product: "MODIS_NRT",
+    latitude: 41.0123,
+    longitude: 14.9541,
+    observedAt: "2026-11-07T09:58:00.000Z",
+    evidence: {
+      instrument: "MODIS",
+      satellite: "Aqua",
+      confidence: 58,
+      frpMegawatts: 15.4,
+      brightnessKelvin: 323.8,
+      dayNight: "day",
+      version: "6.1NRT",
+      scanKm: 1.0,
+      trackKm: 1.0,
+    },
+  },
+  {
+    key: "campania/irpinia-lapio",
+    product: "VIIRS_NOAA21_NRT",
+    latitude: 40.9842,
+    longitude: 14.9468,
+    observedAt: "2026-11-07T11:46:00.000Z",
+    evidence: { ...VIIRS, satellite: "2", confidence: "low", frpMegawatts: 1.9, brightnessKelvin: 309.2, dayNight: "day" },
+  },
+  {
+    key: "campania/sannio-guardia",
+    product: "VIIRS_SNPP_NRT",
+    latitude: 41.2486,
+    longitude: 14.5974,
+    observedAt: "2026-11-06T22:30:00.000Z",
+    evidence: { ...VIIRS, satellite: "N", confidence: "low", frpMegawatts: 1.4, brightnessKelvin: 303.1, dayNight: "night" },
   },
 ];
 

@@ -22,7 +22,7 @@ export default async function EmberGapPage() {
     <div className="mx-[calc(50%-50vw+1rem)] -mt-2 flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold tracking-tight">Wildfire evidence map</h1>
-        <Button asChild size="sm">
+        <Button asChild size="sm" className="bg-orange-600 text-white hover:bg-orange-700">
           <Link href="/app/embergap/report">Report a possible fire</Link>
         </Button>
       </div>

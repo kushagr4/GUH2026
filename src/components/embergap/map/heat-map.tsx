@@ -18,11 +18,44 @@ import {
 } from "./projection";
 
 /**
- * OpenStreetMap tiles: keyless, presentation only, with attribution. Tiles are
+ * Base maps: presentation only, with attribution. Tiles are
  * only ever scaled down (see tilesFor), which keeps them sharp. Offline, the
  * heat layer still draws.
  */
-const TILE_TEMPLATE = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+type BasemapId = "satellite" | "streets";
+
+type Basemap = {
+  label: string;
+  tiles: string;
+  /** Transparent place names drawn above the heat layer, if the basemap has none of its own. */
+  labels: string | null;
+  attribution: { text: string; href: string };
+  /** Recolour for dark mode (fine for street maps, wrong for photos). */
+  invertInDark: boolean;
+};
+
+const ESRI = "https://server.arcgisonline.com/ArcGIS/rest/services";
+
+const BASEMAPS: Record<BasemapId, Basemap> = {
+  // Esri World Imagery: real aerial and satellite photography, keyless, with attribution.
+  satellite: {
+    label: "Satellite",
+    tiles: `${ESRI}/World_Imagery/MapServer/tile/{z}/{y}/{x}`,
+    labels: `${ESRI}/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}`,
+    attribution: {
+      text: "Esri, Maxar, Earthstar Geographics",
+      href: "https://www.arcgis.com/home/item.html?id=10df2279f9684e4a9f6a7f08febac2a9",
+    },
+    invertInDark: false,
+  },
+  streets: {
+    label: "Streets",
+    tiles: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+    labels: null,
+    attribution: { text: "OpenStreetMap", href: "https://www.openstreetmap.org/copyright" },
+    invertInDark: true,
+  },
+};
 const HIT_RADIUS = 28;
 /** Zoom levels per wheel delta unit: a mouse notch (~100) is about 0.6 levels. */
 const WHEEL_ZOOM_PER_UNIT = 1 / 160;
@@ -30,7 +63,7 @@ const WHEEL_ZOOM_PER_UNIT = 1 / 160;
 const PINCH_ZOOM_PER_UNIT = 1 / 40;
 /** Touch pinch: zoom faster than the finger ratio alone. */
 const TOUCH_PINCH_GAIN = 1.6;
-const CONTROL = "size-8 text-base leading-none hover:bg-muted";
+const CONTROL = "size-8 text-base leading-none hover:bg-orange-50 hover:text-orange-700 dark:hover:bg-orange-950";
 const SETTLE_MS = 500;
 
 type Layers = { investigations: boolean; anomalies: boolean };
@@ -54,7 +87,7 @@ function weightOf(feature: MapFeature): number {
 
 /** Heat radius in screen px: wide enough that nearby evidence blends, never smaller than readable. */
 function radiusOf(feature: MapFeature, metresPerPx: number): number {
-  const metres = feature.kind === "investigation" ? feature.location.precisionMeters * 2.5 : 2_000;
+  const metres = feature.kind === "investigation" ? feature.location.precisionMeters * 2.5 : 1_300;
   const min = feature.kind === "investigation" ? 44 : 28;
   return Math.min(320, Math.max(min, metres / metresPerPx));
 }
@@ -76,23 +109,37 @@ function kernelsFor(feature: MapFeature, x: number, y: number, r: number): Kerne
   const weight = weightOf(feature);
   const seed = hashOf(feature.id);
   const lobes = feature.kind === "investigation" ? 4 : 3;
-  const kernels: Kernel[] = [{ x, y, r, weight: weight * 0.7 }];
+  const kernels: Kernel[] = [{ x, y, r, weight: weight * 0.55 }];
   for (let i = 0; i < lobes; i += 1) {
     const angle = (seed % 628) / 100 + (i / lobes) * Math.PI * 2 + (((seed >>> (i * 4)) & 7) - 3.5) * 0.15;
-    const distance = r * (0.18 + (((seed >>> (i * 5 + 3)) & 15) / 15) * 0.22);
+    const distance = r * (0.28 + (((seed >>> (i * 5 + 3)) & 15) / 15) * 0.32);
     kernels.push({
       x: x + Math.cos(angle) * distance,
       y: y + Math.sin(angle) * distance,
-      r: r * (0.55 + (((seed >>> (i * 3 + 7)) & 7) / 7) * 0.2),
-      weight: weight * 0.35,
+      r: r * (0.42 + (((seed >>> (i * 3 + 7)) & 7) / 7) * 0.28),
+      weight: weight * 0.42,
     });
   }
   return kernels;
 }
 
+/** A "turbo"-style scale: vivid, and ordered so more heat always reads as hotter. Shared with the legend. */
+export const HEAT_STOPS: ReadonlyArray<readonly [number, string]> = [
+  [0.08, "#4662d7"],
+  [0.22, "#36aaf9"],
+  [0.36, "#1ae4b6"],
+  [0.5, "#72fe5e"],
+  [0.62, "#c8ef34"],
+  [0.74, "#faba39"],
+  [0.86, "#f66b19"],
+  [1, "#d62305"],
+];
+
+const HEAT_GRADIENT_CSS = `linear-gradient(to right, ${HEAT_STOPS.map(([at, colour]) => `${colour} ${at * 100}%`).join(", ")})`;
+
 let palette: Uint8ClampedArray | null = null;
 
-/** Blue, cyan, green, yellow, red: 256 RGBA entries. */
+/** HEAT_STOPS as 256 RGBA entries. */
 function heatPalette(): Uint8ClampedArray {
   if (palette) return palette;
   const canvas = document.createElement("canvas");
@@ -100,11 +147,7 @@ function heatPalette(): Uint8ClampedArray {
   canvas.height = 1;
   const ctx = canvas.getContext("2d")!;
   const gradient = ctx.createLinearGradient(0, 0, 256, 0);
-  gradient.addColorStop(0.15, "#2563eb");
-  gradient.addColorStop(0.4, "#06b6d4");
-  gradient.addColorStop(0.6, "#84cc16");
-  gradient.addColorStop(0.8, "#facc15");
-  gradient.addColorStop(1, "#dc2626");
+  for (const [at, colour] of HEAT_STOPS) gradient.addColorStop(at, colour);
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, 256, 1);
   palette = ctx.getImageData(0, 0, 256, 1).data;
@@ -112,7 +155,7 @@ function heatPalette(): Uint8ClampedArray {
 }
 
 /** Opacity per intensity: rises gently from 0, so edges fade out instead of ending in a ring. */
-const OPACITY = Array.from({ length: 256 }, (_, i) => Math.round(Math.min(200, 255 * (i / 255) ** 0.85)));
+const OPACITY = Array.from({ length: 256 }, (_, i) => Math.round(Math.min(228, 255 * (i / 255) ** 0.72)));
 
 function drawHeat(canvas: HTMLCanvasElement, kernels: Kernel[]) {
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
@@ -175,6 +218,10 @@ export function HeatMap({
   const [layers, setLayers] = useState<Layers>({ investigations: true, anomalies: true });
   const [hover, setHover] = useState<{ label: string; x: number; y: number } | null>(null);
   const [failedTiles, setFailedTiles] = useState<Set<string>>(() => new Set());
+  const [basemapId, setBasemapId] = useState<BasemapId>("satellite");
+  const [wheelHint, setWheelHint] = useState(false);
+  const hintTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const basemap = BASEMAPS[basemapId];
 
   const region = regions.find((item) => item.id === regionId) ?? regions[0]!;
   // Until the user moves the map, it fits the chosen region.
@@ -208,11 +255,19 @@ export function HeatMap({
     }, SETTLE_MS);
   }
 
-  // Wheel zoom needs a non-passive listener so the page doesn't scroll.
+  // Wheel zoom needs a non-passive listener so the page doesn't scroll. The map
+  // is nearly page-sized, so a plain scroll only zooms once the map has been
+  // clicked (focused); otherwise it scrolls the page. Pinch (ctrl+wheel) always zooms.
   useEffect(() => {
     const element = containerRef.current;
     if (!element) return;
     const onWheel = (event: WheelEvent) => {
+      if (!event.ctrlKey && !element.contains(document.activeElement)) {
+        setWheelHint(true);
+        if (hintTimer.current) clearTimeout(hintTimer.current);
+        hintTimer.current = setTimeout(() => setWheelHint(false), 1400);
+        return;
+      }
       event.preventDefault();
       const { camera: current, size: currentSize } = latest.current;
       if (!current || !currentSize) return;
@@ -381,7 +436,26 @@ export function HeatMap({
   }
 
   const selected = screen.find((point) => point.feature.id === selectedId) ?? null;
-  const tiles = camera && size ? tilesFor(camera, size, TILE_TEMPLATE) : [];
+  const baseTiles = camera && size ? tilesFor(camera, size, basemap.tiles) : [];
+  const labelTiles = camera && size && basemap.labels ? tilesFor(camera, size, basemap.labels) : [];
+
+  const renderTiles = (tiles: typeof baseTiles, layer: string, extraClass: string) =>
+    tiles
+      .filter((tile) => !failedTiles.has(`${layer}:${tile.key}`))
+      .map((tile) => (
+        // eslint-disable-next-line @next/next/no-img-element -- third-party map tiles, no optimisation needed
+        <img
+          key={`${layer}:${tile.key}`}
+          src={tile.url}
+          alt=""
+          aria-hidden
+          draggable={false}
+          referrerPolicy="strict-origin-when-cross-origin"
+          className={cn("pointer-events-none absolute max-w-none", extraClass)}
+          style={{ left: tile.x, top: tile.y, width: tile.size, height: tile.size }}
+          onError={() => setFailedTiles((previous) => new Set(previous).add(`${layer}:${tile.key}`))}
+        />
+      ));
 
   return (
     <div
@@ -405,24 +479,15 @@ export function HeatMap({
         className,
       )}
     >
-      {tiles
-        .filter((tile) => !failedTiles.has(tile.key))
-        .map((tile) => (
-          // eslint-disable-next-line @next/next/no-img-element -- third-party map tiles, no optimisation needed
-          <img
-            key={tile.key}
-            src={tile.url}
-            alt=""
-            aria-hidden
-            draggable={false}
-            referrerPolicy="strict-origin-when-cross-origin"
-            className="pointer-events-none absolute max-w-none dark:opacity-80 dark:invert dark:hue-rotate-180"
-            style={{ left: tile.x, top: tile.y, width: tile.size, height: tile.size }}
-            onError={() => setFailedTiles((previous) => new Set(previous).add(tile.key))}
-          />
-        ))}
+      {renderTiles(
+        baseTiles,
+        `${basemapId}-base`,
+        basemap.invertInDark ? "dark:opacity-80 dark:invert dark:hue-rotate-180" : "",
+      )}
 
       <canvas ref={canvasRef} aria-hidden className="pointer-events-none absolute inset-0 h-full w-full" />
+
+      {renderTiles(labelTiles, `${basemapId}-labels`, "")}
 
       {selected ? (
         <span
@@ -430,6 +495,15 @@ export function HeatMap({
           className="pointer-events-none absolute size-8 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow-[0_0_0_2px_rgba(0,0,0,0.6)]"
           style={{ left: selected.x, top: selected.y }}
         />
+      ) : null}
+
+      {wheelHint ? (
+        <span
+          role="status"
+          className="pointer-events-none absolute inset-x-0 top-1/2 z-20 mx-auto w-fit -translate-y-1/2 rounded-lg bg-black/70 px-4 py-2 text-sm text-white"
+        >
+          Click the map to zoom with scroll, or pinch / Ctrl + scroll
+        </span>
       ) : null}
 
       {hover ? (
@@ -442,7 +516,7 @@ export function HeatMap({
       ) : null}
 
       <div
-        className="absolute top-3 left-3 flex gap-1 rounded-lg bg-background/90 p-1 shadow-sm"
+        className="absolute top-3 left-3 flex max-w-[calc(100%-13rem)] flex-wrap gap-1 rounded-lg bg-background/90 p-1 shadow-sm"
         onPointerDown={(event) => event.stopPropagation()}
       >
         {regions.map((item) => (
@@ -453,10 +527,34 @@ export function HeatMap({
             onClick={() => showRegion(item)}
             className={cn(
               "rounded-md px-2.5 py-1 text-xs font-medium",
-              item.id === regionId && userCamera === null ? "bg-foreground text-background" : "hover:bg-muted",
+              item.id === regionId && userCamera === null
+                ? "bg-orange-600 text-white"
+                : "hover:bg-orange-50 hover:text-orange-800 dark:hover:bg-orange-950",
             )}
           >
             {item.name}
+          </button>
+        ))}
+      </div>
+
+      <div
+        className="absolute top-3 right-14 flex gap-1 rounded-lg bg-background/90 p-1 shadow-sm"
+        role="group"
+        aria-label="Base map"
+        onPointerDown={(event) => event.stopPropagation()}
+      >
+        {(Object.keys(BASEMAPS) as BasemapId[]).map((id) => (
+          <button
+            key={id}
+            type="button"
+            aria-pressed={id === basemapId}
+            onClick={() => setBasemapId(id)}
+            className={cn(
+              "rounded-md px-2.5 py-1 text-xs font-medium",
+              id === basemapId ? "bg-foreground text-background" : "hover:bg-muted",
+            )}
+          >
+            {BASEMAPS[id].label}
           </button>
         ))}
       </div>
@@ -490,8 +588,8 @@ export function HeatMap({
           <span className="text-muted-foreground">Low</span>
           <span
             aria-hidden
-            className="h-2 w-28 rounded-full"
-            style={{ background: "linear-gradient(to right, #2563eb, #06b6d4, #84cc16, #facc15, #dc2626)" }}
+            className="h-2 w-32 rounded-full"
+            style={{ background: HEAT_GRADIENT_CSS }}
           />
           <span className="text-muted-foreground">High</span>
         </div>
@@ -509,7 +607,11 @@ export function HeatMap({
               onClick={() => setLayers((previous) => ({ ...previous, [key]: !previous[key] }))}
               className={cn(
                 "rounded-full border px-2 py-0.5",
-                layers[key] ? "border-foreground/30 bg-foreground/5" : "text-muted-foreground line-through opacity-60",
+                layers[key]
+                  ? key === "investigations"
+                    ? "border-rose-300 bg-rose-50 text-rose-800 dark:border-rose-900 dark:bg-rose-950 dark:text-rose-200"
+                    : "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200"
+                  : "text-muted-foreground line-through opacity-60",
               )}
             >
               {text}
@@ -521,13 +623,13 @@ export function HeatMap({
       <div className="absolute right-2 bottom-2 rounded bg-background/80 px-1.5 py-0.5 text-[10px] text-muted-foreground">
         ©{" "}
         <a
-          href="https://www.openstreetmap.org/copyright"
+          href={basemap.attribution.href}
           target="_blank"
           rel="noreferrer"
           className="underline"
           onPointerDown={(event) => event.stopPropagation()}
         >
-          OpenStreetMap
+          {basemap.attribution.text}
         </a>
       </div>
     </div>

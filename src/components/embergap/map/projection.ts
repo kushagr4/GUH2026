@@ -3,7 +3,7 @@ import type { Bbox } from "@/lib/embergap/contracts";
 /** Web Mercator, as used by OpenStreetMap tiles. */
 export const TILE_SIZE = 256;
 export const MIN_ZOOM = 4;
-export const MAX_ZOOM = 16;
+export const MAX_ZOOM = 18;
 const MAX_LAT = 85.05112878;
 
 export type Camera = { latitude: number; longitude: number; zoom: number };
